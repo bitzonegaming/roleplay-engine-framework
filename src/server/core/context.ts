@@ -1,0 +1,289 @@
+import { EngineClient } from '@bitzonegaming/roleplay-engine-sdk';
+
+import { RPEventEmitter } from '../../core/bus/event-emitter';
+import { RPHookBus } from '../../core/bus/hook-bus';
+import { RPLogger } from '../../core/logger';
+
+import { RPServerEvents } from './events/events';
+import { RPServerHooks } from './hooks/hooks';
+import { RPServerService, RPServerServiceCtor } from './server-service';
+
+/** Custom options that can be passed to server context extensions */
+export type CustomServerContextOptions = Record<string, unknown>;
+
+/** Configuration options for creating a server context */
+export interface RPServerContextOptions {
+  /** The engine client for API communication */
+  engineClient: EngineClient;
+  /** Event emitter for server events */
+  eventEmitter: RPEventEmitter<RPServerEvents>;
+  /** Hook bus for server hooks */
+  hookBus: RPHookBus<RPServerHooks>;
+  /** Logger instance */
+  logger: RPLogger;
+}
+
+/** Constructor type for server context implementations */
+export type RPServerContextCtor = new (options: RPServerContextOptions) => RPServerContext;
+
+/**
+ * Server context that provides dependency injection and service management for the roleplay server.
+ *
+ * This class serves as the central container for all server infrastructure including:
+ * - API instances with automatic caching and reuse
+ * - Service registration and dependency injection
+ * - Shared infrastructure (event emitter, hook bus, logger)
+ * - Service lifecycle management with initialization
+ *
+ * The context follows a singleton pattern for APIs and services, ensuring that each
+ * service type and API type is instantiated only once and reused throughout the
+ * application lifecycle.
+ *
+ * @example
+ * ```typescript
+ * // Create a server context
+ * const context = new RPServerContext({
+ *   engineClient: client,
+ *   eventEmitter: emitter,
+ *   hookBus: hooks,
+ *   logger: logger
+ * });
+ *
+ * // Register services
+ * context.addService(AccountService);
+ * context.addService(SessionService);
+ *
+ * // Initialize all services
+ * await context.init();
+ *
+ * // Use services
+ * const accountService = context.getService(AccountService);
+ * const account = await accountService.getAccount('acc_123');
+ * ```
+ */
+export class RPServerContext {
+  /** Cache of API instances to ensure singleton behavior */
+  private readonly apis = new Map<new (c: EngineClient) => unknown, unknown>();
+  /** Map of registered services */
+  private readonly services = new Map<RPServerServiceCtor, RPServerService>();
+  /** Flag indicating whether the context has been initialized */
+  private initialized = false;
+
+  /** The engine client for making API requests */
+  protected readonly engineClient: EngineClient;
+
+  /** Logger instance for this context */
+  public readonly logger: RPLogger;
+  /** Event emitter for server-wide events */
+  public readonly eventEmitter: RPEventEmitter<RPServerEvents>;
+  /** Hook bus for server-wide hooks */
+  public readonly hookBus: RPHookBus<RPServerHooks>;
+
+  /**
+   * Creates a new server context with the provided infrastructure.
+   *
+   * @param options - The configuration options including client, emitter, hooks, and logger
+   */
+  constructor(options: RPServerContextOptions) {
+    this.logger = options.logger;
+    this.engineClient = options.engineClient;
+    this.eventEmitter = options.eventEmitter;
+    this.hookBus = options.hookBus;
+
+    this.eventEmitter.setErrorHandler((error, event, payload) => {
+      this.logger.error(`Async event handler error in '${event}':`, error, payload);
+      if (event !== 'error') {
+        this.eventEmitter.emit('eventEmitterError', { error, event, payload });
+      }
+    });
+  }
+
+  /**
+   * Factory method for creating server context instances.
+   *
+   * This method allows for dependency injection of custom context implementations
+   * while maintaining type safety and proper initialization.
+   *
+   * @param ctor - The context constructor to use
+   * @param options - The configuration options for the context
+   * @returns A new instance of the specified context type
+   *
+   * @example
+   * ```typescript
+   * class CustomServerContext extends RPServerContext {
+   *   // Custom implementation
+   * }
+   *
+   * const context = RPServerContext.create(CustomServerContext, {
+   *   engineClient: client,
+   *   eventEmitter: emitter,
+   *   hookBus: hooks,
+   *   logger: logger
+   * });
+   * ```
+   */
+  public static create(
+    ctor: RPServerContextCtor,
+    options: RPServerContextOptions,
+  ): RPServerContext {
+    return new ctor(options);
+  }
+
+  /**
+   * Gets a roleplay engine API instance with automatic caching.
+   *
+   * This method implements the singleton pattern for API instances, ensuring that
+   * each API type is instantiated only once and reused for subsequent requests.
+   * The API instances are automatically configured with the context's engine client.
+   *
+   * @template Api - The API class type
+   * @param ApiConstructor - The API class constructor
+   * @returns A singleton instance of the requested API
+   *
+   * @example
+   * ```typescript
+   * const accountApi = context.getApi(AccountApi);
+   * const sessionApi = context.getApi(SessionApi);
+   *
+   * // Subsequent calls return the same instances
+   * const sameAccountApi = context.getApi(AccountApi); // Same instance as above
+   * ```
+   */
+  public getApi<Api>(ApiConstructor: new (client: EngineClient) => Api): Api {
+    let api = this.apis.get(ApiConstructor);
+    if (!api) {
+      api = new ApiConstructor(this.engineClient);
+      this.apis.set(ApiConstructor, api);
+    }
+    return api as Api;
+  }
+
+  /**
+   * Registers a service with the context.
+   *
+   * Services must be registered before the context is initialized. Once registered,
+   * services can be retrieved using getService() and will be automatically
+   * initialized when the context is initialized.
+   *
+   * @param serviceConstructor - The service class constructor to register
+   * @returns The context instance for method chaining
+   * @throws {Error} When attempting to add a service after initialization
+   *
+   * @example
+   * ```typescript
+   * context
+   *   .addService(AccountService)
+   *   .addService(SessionService)
+   *   .addService(WorldService);
+   *
+   * await context.init(); // Initializes all registered services
+   * ```
+   */
+  public addService(serviceConstructor: RPServerServiceCtor) {
+    if (this.initialized) {
+      throw new Error('Cannot add service after server start.');
+    }
+
+    const service = new serviceConstructor(this);
+    this.services.set(serviceConstructor, service);
+    return this;
+  }
+
+  /**
+   * Retrieves a registered service instance.
+   *
+   * Services are singletons within the context - each service type is
+   * instantiated only once and the same instance is returned for all requests.
+   *
+   * @template Service - The service class type
+   * @param serviceConstructor - The service class constructor
+   * @returns The singleton instance of the requested service
+   * @throws {Error} When the requested service is not registered
+   *
+   * @example
+   * ```typescript
+   * const accountService = context.getService(AccountService);
+   * const sessionService = context.getService(SessionService);
+   *
+   * // Use the services
+   * const account = await accountService.getAccount('acc_123');
+   * const session = sessionService.getSession('sess_456');
+   * ```
+   */
+  public getService<Service extends RPServerService>(
+    serviceConstructor: RPServerServiceCtor,
+  ): Service {
+    const service = this.services.get(serviceConstructor) as Service;
+    if (!service) {
+      throw new Error(`Service ${serviceConstructor.name} not registered in the context.`);
+    }
+    return service;
+  }
+
+  /**
+   * Initializes the context and all registered services.
+   *
+   * This method should be called after all services have been registered.
+   * It calls the init() method on each registered service in registration order.
+   * The context can only be initialized once - subsequent calls are ignored.
+   *
+   * @returns Promise that resolves when all services are initialized
+   *
+   * @example
+   * ```typescript
+   * // Register all services first
+   * context.addService(AccountService);
+   * context.addService(SessionService);
+   *
+   * // Then initialize the context
+   * await context.init();
+   *
+   * // Now services are ready to use
+   * const accountService = context.getService(AccountService);
+   * ```
+   */
+  public async init() {
+    if (this.initialized) {
+      return;
+    }
+
+    this.initialized = true;
+    for (const service of this.services.values()) {
+      await service.init();
+    }
+  }
+
+  /**
+   * Disposes the context and all registered services.
+   *
+   * This method calls the dispose() method on each registered service in reverse
+   * registration order to ensure proper cleanup. Services are disposed in the
+   * opposite order of their initialization to handle dependencies correctly.
+   *
+   * @returns Promise that resolves when all services are disposed
+   *
+   * @example
+   * ```typescript
+   * // Gracefully shutdown the server
+   * await context.dispose();
+   * console.log('All services disposed');
+   * ```
+   */
+  public async dispose() {
+    if (!this.initialized) {
+      return;
+    }
+
+    // Dispose services in reverse order
+    const services = Array.from(this.services.values()).reverse();
+    for (const service of services) {
+      try {
+        await service.dispose();
+      } catch (error) {
+        this.logger.error(`Error disposing service ${service.constructor.name}:`, error);
+      }
+    }
+
+    this.initialized = false;
+  }
+}

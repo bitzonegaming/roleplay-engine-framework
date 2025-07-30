@@ -1,0 +1,87 @@
+{
+  "name": "@bitzonegaming/gamemode-sdk",
+  "version": "0.1.0",
+  "description": "Roleplay Engine Gamemode SDK",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "homepage": "https://bitzone.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bitzonegaming/gamemode-sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/bitzonegaming/gamemode-sdk/issues"
+  },
+  "keywords": [
+    "roleplay"
+  ],
+  "scripts": {
+    "gen:barrels": "node scripts/generate-barrels.js",
+    "lint": "eslint 'src/**/*.{ts,tsx}' --fix",
+    "format": "prettier --write 'src/**/*.{ts,tsx,js,json,md}'",
+    "gen:sdk": "npx openapi-generator-cli generate --generator-key sdk",
+    "build": "tsc -p tsconfig.build.json",
+    "test": "jest"
+  },
+  "author": "bitzone",
+  "license": "ISC",
+  "engines": {
+    "npm": ">=7.0.0",
+    "node": "^20.0.0"
+  },
+  "dependencies": {
+    "@bitzonegaming/roleplay-engine-sdk": "^0.1.12",
+    "emittery": "^1.2.0",
+    "reflect-metadata": "^0.2.2",
+    "uuid": "^11.1.0",
+    "ws": "^8.18.3"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.js",
+      "require": "./dist/server/index.js"
+    },
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "import": "./dist/client/index.js",
+      "require": "./dist/client/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.28.0",
+    "@babel/preset-env": "^7.28.0",
+    "@eslint/eslintrc": "^3.3.1",
+    "@eslint/js": "^9.31.0",
+    "@types/jest": "^30.0.0",
+    "@types/nock": "^11.1.0",
+    "@types/node": "^24.0.13",
+    "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.18.1",
+    "@typescript-eslint/eslint-plugin": "^8.36.0",
+    "@typescript-eslint/parser": "^8.36.0",
+    "babel-jest": "^30.0.5",
+    "eslint": "^9.31.0",
+    "eslint-config-prettier": "^10.1.5",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-prettier": "^5.5.1",
+    "globals": "^16.3.0",
+    "jest": "^30.0.4",
+    "prettier": "^3.6.2",
+    "ts-jest": "^29.4.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.36.0"
+  }
+}

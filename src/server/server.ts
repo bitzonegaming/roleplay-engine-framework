@@ -1,0 +1,339 @@
+import { ApiKeyAuthorization, EngineClient } from '@bitzonegaming/roleplay-engine-sdk';
+
+import { RPEventEmitter } from '../core/bus/event-emitter';
+import { RPHookBus } from '../core/bus/hook-bus';
+import { defaultLogger, RPLogger } from '../core/logger';
+
+import { RPServerEvents } from './core/events/events';
+import { RPServerHooks } from './core/hooks/hooks';
+import { EngineSocket } from './socket/socket';
+import { SessionService } from './domains/session/service';
+import {
+  CustomServerContextOptions,
+  RPServerContext,
+  RPServerContextCtor,
+  RPServerContextOptions,
+} from './core/context';
+import { RPS2CEventHandler } from './s2c/server-to-client-event-handler';
+import { NativeS2CEventsAdapter } from './natives/server-to-client-events-adapter';
+import { AccountService } from './domains/account/service';
+import { ConfigurationService } from './domains/configuration/service';
+import { LocalizationService } from './domains/localization/service';
+import { WorldService } from './domains/world/service';
+import { ReferenceService } from './domains/reference/service';
+
+/** Configuration options for creating a roleplay server instance */
+export interface RPServerOptions {
+  /** Unique identifier for this server instance */
+  serverId: string;
+  /** Base URL for the roleplay engine API */
+  apiUrl: string;
+  /** WebSocket URL for real-time communication */
+  socketUrl: string;
+  /** API key identifier for authentication */
+  apiKeyId: string;
+  /** API key secret for authentication */
+  apiKeySecret: string;
+  /** Request timeout in milliseconds (default: 10000) */
+  timeout?: number;
+  /** Custom logger instance (default: console logger) */
+  logger?: RPLogger;
+}
+
+/** Native integrations and customization options for the server */
+export interface RPServerNatives {
+  /** Adapter for server-to-client event handling with the game engine */
+  s2cEventsAdapter: NativeS2CEventsAdapter;
+  /** Optional custom server context configuration */
+  customContext?: {
+    /** Custom context constructor type */
+    type: RPServerContextCtor;
+    /** Additional options for the custom context */
+    options: CustomServerContextOptions;
+  };
+}
+
+/**
+ * Main roleplay server class that orchestrates all server functionality.
+ *
+ * This class provides:
+ * - Singleton server instance management
+ * - Complete server lifecycle (start, stop)
+ * - Service registration and dependency injection
+ * - WebSocket connection management
+ * - Integration with roleplay engine APIs
+ * - Event handling and server-to-client communication
+ *
+ * The server follows a singleton pattern and must be created using the static
+ * create() method before use. It automatically registers all core services
+ * (Account, Session, World, Configuration, Localization, Reference, etc.) and
+ * manages their initialization.
+ *
+ * @example
+ * ```typescript
+ * // Create and configure the server
+ * const server = RPServer.create({
+ *   serverId: 'my-roleplay-server',
+ *   apiUrl: 'https://api.eu-central-nova.bitzone.com',
+ *   socketUrl: 'wss://socket.eu-central-nova.bitzone.com',
+ *   apiKeyId: 'your-api-key-id',
+ *   apiKeySecret: 'your-api-key-secret',
+ *   timeout: 15000
+ * }, {
+ *   s2cEventsAdapter: new MyS2CEventsAdapter()
+ * });
+ *
+ * // Start the server
+ * await server.start();
+ *
+ * // Access services through the context
+ * const context = server.getContext();
+ * const accountService = context.getService(AccountService);
+ *
+ * // Stop the server when done
+ * server.stop();
+ * ```
+ */
+export class RPServer {
+  /** Singleton instance of the server */
+  private static instance: RPServer;
+
+  /** Server context containing all services and infrastructure */
+  private readonly context: RPServerContext;
+  /** WebSocket connection to the roleplay engine */
+  private readonly socket: EngineSocket;
+  /** Handler for server-to-client events */
+  private readonly s2cEventHandler: RPS2CEventHandler;
+  /** Flag to track if shutdown handlers are registered */
+  private shutdownHandlersRegistered = false;
+
+  /**
+   * Private constructor for singleton pattern.
+   * Use RPServer.create() to create an instance.
+   *
+   * @private
+   * @param options - Server configuration options
+   * @param natives - Native integrations and adapters
+   */
+  private constructor(options: RPServerOptions, natives: RPServerNatives) {
+    const logger = options.logger ?? defaultLogger;
+    const engineClient = new EngineClient(
+      {
+        apiUrl: options.apiUrl,
+        serverId: options.serverId,
+        timeout: options.timeout,
+        applicationName: 'gamemode',
+      },
+      new ApiKeyAuthorization(options.apiKeyId, options.apiKeySecret),
+    );
+
+    const eventEmitter = new RPEventEmitter<RPServerEvents>();
+    const hookBus = new RPHookBus<RPServerHooks>();
+
+    this.s2cEventHandler = new RPS2CEventHandler(eventEmitter, natives.s2cEventsAdapter);
+    this.socket = new EngineSocket(
+      {
+        url: options.socketUrl,
+        serverId: options.serverId,
+        apiKeyId: options.apiKeyId,
+        apiKeySecret: options.apiKeySecret,
+      },
+      eventEmitter,
+      logger,
+    );
+
+    const contextType = natives.customContext?.type ?? RPServerContext;
+    const contextOptions: RPServerContextOptions = {
+      engineClient,
+      eventEmitter,
+      hookBus,
+      logger,
+      ...natives?.customContext?.options,
+    };
+
+    this.context = RPServerContext.create(contextType, contextOptions);
+    this.context
+      .addService(ConfigurationService)
+      .addService(LocalizationService)
+      .addService(WorldService)
+      .addService(SessionService)
+      .addService(ReferenceService)
+      .addService(AccountService);
+  }
+
+  /**
+   * Creates a new roleplay server instance.
+   *
+   * This factory method creates and configures a new server instance with all
+   * necessary services and connections. The server follows a singleton pattern,
+   * so subsequent calls will replace the previous instance.
+   *
+   * @param config - Server configuration including API endpoints and credentials
+   * @param natives - Native integrations required for game engine communication
+   * @returns A new configured server instance
+   *
+   * @example
+   * ```typescript
+   * const server = RPServer.create({
+   *   serverId: 'my-server',
+   *   apiUrl: 'https://api.eu-central-nova.bitzone.com',
+   *   socketUrl: 'wss://socket.eu-central-nova.bitzone.com',
+   *   apiKeyId: 'your-key-id',
+   *   apiKeySecret: 'your-key-secret'
+   * }, {
+   *   s2cEventsAdapter: new MyS2CEventsAdapter()
+   * });
+   * ```
+   */
+  public static create(config: RPServerOptions, natives: RPServerNatives): RPServer {
+    this.instance = new RPServer(config, natives);
+    return this.instance;
+  }
+
+  /**
+   * Gets the singleton server instance.
+   *
+   * Returns the previously created server instance. The server must be created
+   * using RPServer.create() before calling this method.
+   *
+   * @returns The singleton server instance
+   * @throws {Error} When no server instance has been created
+   *
+   * @example
+   * ```typescript
+   * // Somewhere in your application after RPServer.create()
+   * const server = RPServer.get();
+   * const context = server.getContext();
+   * ```
+   */
+  public static get(): RPServer {
+    if (!RPServer.instance) {
+      throw new Error('RPServer instance is not created. Use RPServer.create() first.');
+    }
+    return RPServer.instance;
+  }
+
+  /**
+   * Starts the roleplay server.
+   *
+   * This method initializes the WebSocket connection to the roleplay engine
+   * and starts all registered services. It also registers process signal handlers
+   * for graceful shutdown. The server will be ready to handle events and API
+   * requests after this method completes.
+   *
+   * @returns Promise that resolves when the server is fully started
+   *
+   * @example
+   * ```typescript
+   * const server = RPServer.create(config, natives);
+   * await server.start();
+   * console.log('Server is ready!');
+   * ```
+   */
+  public async start(): Promise<void> {
+    await this.socket.start();
+    await this.context.init();
+    this.registerShutdownHandlers();
+  }
+
+  /**
+   * Gets the server context for accessing services.
+   *
+   * The context provides dependency injection and service management.
+   * Use this to access any of the registered services (Account, Session,
+   * World, Configuration, etc.).
+   *
+   * @template C - The context type (for custom contexts)
+   * @returns The server context instance
+   *
+   * @example
+   * ```typescript
+   * const context = server.getContext();
+   * const accountService = context.getService(AccountService);
+   * const sessionService = context.getService(SessionService);
+   *
+   * // For custom contexts
+   * const customContext = server.getContext<MyCustomContext>();
+   * ```
+   */
+  public getContext<C extends RPServerContext>(): C {
+    return this.context as C;
+  }
+
+  /**
+   * Stops the roleplay server gracefully.
+   *
+   * This method performs a complete graceful shutdown by:
+   * 1. Disposing all services in reverse order
+   * 2. Closing the WebSocket connection to the roleplay engine
+   * 3. Cleaning up all resources
+   *
+   * @returns Promise that resolves when the server is fully stopped
+   *
+   * @example
+   * ```typescript
+   * // Gracefully shutdown the server
+   * await server.stop();
+   * console.log('Server stopped gracefully');
+   * ```
+   */
+  public async stop(): Promise<void> {
+    try {
+      // Dispose all services first
+      await this.context.dispose();
+    } catch (error) {
+      this.context.logger.error('Error during service disposal:', error);
+    }
+
+    // Close WebSocket connection
+    this.socket.close(1000, 'Normal closure');
+  }
+
+  /**
+   * Registers process signal handlers for graceful shutdown.
+   *
+   * This method sets up listeners for SIGTERM, SIGINT, and SIGHUP signals
+   * to ensure the server shuts down gracefully when receiving system signals.
+   * This is especially important in containerized environments.
+   *
+   * @private
+   */
+  private registerShutdownHandlers(): void {
+    if (this.shutdownHandlersRegistered) {
+      return;
+    }
+
+    const gracefulShutdown = async (signal: string) => {
+      this.context.logger.info(`Received ${signal}, initiating graceful shutdown...`);
+      try {
+        await this.stop();
+        this.context.logger.info('Server shutdown completed successfully');
+        process.exit(0);
+      } catch (error) {
+        this.context.logger.error('Error during graceful shutdown:', error);
+        process.exit(1);
+      }
+    };
+
+    // Handle graceful shutdown signals
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+    process.on('SIGHUP', () => gracefulShutdown('SIGHUP'));
+
+    // Handle uncaught exceptions and unhandled rejections
+    process.on('uncaughtException', (error) => {
+      this.context.logger.error('Uncaught exception:', error);
+      void gracefulShutdown('uncaughtException');
+    });
+
+    process.on('unhandledRejection', (reason, promise) => {
+      this.context.logger.error(
+        `Unhandled rejection at promise: ${String(promise)}, reason:`,
+        reason,
+      );
+      void gracefulShutdown('unhandledRejection');
+    });
+
+    this.shutdownHandlersRegistered = true;
+  }
+}

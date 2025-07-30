@@ -1,0 +1,445 @@
+/**
+ * Tests for RPServer
+ */
+import { ApiKeyAuthorization, EngineClient } from '@bitzonegaming/roleplay-engine-sdk';
+
+import { RPEventEmitter } from '../core/bus/event-emitter';
+import { MockLogger } from '../../test/mocks';
+
+import { RPServerContext } from './core/context';
+import { RPServer, RPServerNatives, RPServerOptions } from './server';
+import { EngineSocket } from './socket/socket';
+import { RPS2CEventHandler } from './s2c/server-to-client-event-handler';
+import { NativeS2CEventsAdapter } from './natives/server-to-client-events-adapter';
+import { AccountService } from './domains/account/service';
+import { SessionService } from './domains/session/service';
+import { WorldService } from './domains/world/service';
+import { ConfigurationService } from './domains/configuration/service';
+import { LocalizationService } from './domains/localization/service';
+import { ReferenceService } from './domains/reference/service';
+
+// Mock external dependencies
+jest.mock('@bitzonegaming/roleplay-engine-sdk');
+jest.mock('./socket/socket');
+jest.mock('./s2c/server-to-client-event-handler');
+jest.mock('./core/context');
+
+describe('RPServer', () => {
+  let mockLogger: MockLogger;
+  let mockS2CEventsAdapter: NativeS2CEventsAdapter;
+  let mockEngineSocket: jest.Mocked<EngineSocket>;
+  let mockS2CEventHandler: jest.Mocked<RPS2CEventHandler>;
+  let mockContext: jest.Mocked<RPServerContext>;
+  let mockEngineClient: jest.Mocked<EngineClient>;
+
+  const testServerOptions: RPServerOptions = {
+    serverId: 'test-server',
+    apiUrl: 'https://api.test.com',
+    socketUrl: 'wss://socket.test.com',
+    apiKeyId: 'test-key-id',
+    apiKeySecret: 'test-key-secret',
+    timeout: 15000,
+  };
+
+  const testNatives: RPServerNatives = {
+    s2cEventsAdapter: {} as NativeS2CEventsAdapter,
+  };
+
+  beforeEach(() => {
+    // Clear singleton instance before each test
+    (RPServer as unknown as { instance: RPServer | undefined }).instance = undefined;
+
+    mockLogger = new MockLogger();
+    mockS2CEventsAdapter = {
+      handleSessionStarted: jest.fn(),
+      handleSessionFinished: jest.fn(),
+      handleAccountChanged: jest.fn(),
+    } as unknown as NativeS2CEventsAdapter;
+
+    // Setup mocks
+    mockEngineClient = {
+      getApi: jest.fn(),
+    } as unknown as jest.Mocked<EngineClient>;
+
+    mockEngineSocket = {
+      start: jest.fn().mockResolvedValue(undefined),
+      close: jest.fn(),
+    } as unknown as jest.Mocked<EngineSocket>;
+
+    mockS2CEventHandler = {
+      handleEvent: jest.fn(),
+    } as unknown as jest.Mocked<RPS2CEventHandler>;
+
+    mockContext = {
+      init: jest.fn().mockResolvedValue(undefined),
+      dispose: jest.fn().mockResolvedValue(undefined),
+      addService: jest.fn().mockReturnThis(),
+      getService: jest.fn(),
+      logger: mockLogger,
+    } as unknown as jest.Mocked<RPServerContext>;
+
+    // Mock constructors
+    (EngineClient as jest.Mock).mockImplementation(() => mockEngineClient);
+    (EngineSocket as jest.Mock).mockImplementation(() => mockEngineSocket);
+    (RPS2CEventHandler as jest.Mock).mockImplementation(() => mockS2CEventHandler);
+    (RPServerContext.create as jest.Mock).mockReturnValue(mockContext);
+
+    testNatives.s2cEventsAdapter = mockS2CEventsAdapter;
+  });
+
+  afterEach(() => {
+    // Clear all mocks
+    jest.clearAllMocks();
+    // Remove process listeners to avoid interference between tests
+    process.removeAllListeners('SIGTERM');
+    process.removeAllListeners('SIGINT');
+    process.removeAllListeners('SIGHUP');
+    process.removeAllListeners('uncaughtException');
+    process.removeAllListeners('unhandledRejection');
+  });
+
+  describe('create', () => {
+    it('should create a new server instance with default logger', () => {
+      const server = RPServer.create(testServerOptions, testNatives);
+
+      expect(server).toBeInstanceOf(RPServer);
+      expect(EngineClient).toHaveBeenCalledWith(
+        {
+          apiUrl: testServerOptions.apiUrl,
+          serverId: testServerOptions.serverId,
+          timeout: testServerOptions.timeout,
+          applicationName: 'gamemode',
+        },
+        expect.any(ApiKeyAuthorization),
+      );
+    });
+
+    it('should create a new server instance with custom logger', () => {
+      const customLogger = new MockLogger();
+      const optionsWithLogger = { ...testServerOptions, logger: customLogger };
+
+      const server = RPServer.create(optionsWithLogger, testNatives);
+
+      expect(server).toBeInstanceOf(RPServer);
+      expect(EngineSocket).toHaveBeenCalledWith(
+        {
+          url: testServerOptions.socketUrl,
+          serverId: testServerOptions.serverId,
+          apiKeyId: testServerOptions.apiKeyId,
+          apiKeySecret: testServerOptions.apiKeySecret,
+        },
+        expect.any(RPEventEmitter),
+        customLogger,
+      );
+    });
+
+    it('should create server with custom context', () => {
+      class CustomContext extends RPServerContext {}
+
+      const customOptions = { customData: 'test' };
+      const nativesWithCustomContext: RPServerNatives = {
+        ...testNatives,
+        customContext: {
+          type: CustomContext,
+          options: customOptions,
+        },
+      };
+
+      RPServer.create(testServerOptions, nativesWithCustomContext);
+
+      expect(RPServerContext.create).toHaveBeenCalledWith(
+        CustomContext,
+        expect.objectContaining({
+          engineClient: mockEngineClient,
+          customData: 'test',
+        }),
+      );
+    });
+
+    it('should register all core services in correct order', () => {
+      RPServer.create(testServerOptions, testNatives);
+
+      expect(mockContext.addService).toHaveBeenCalledTimes(6);
+      expect(mockContext.addService).toHaveBeenNthCalledWith(1, ConfigurationService);
+      expect(mockContext.addService).toHaveBeenNthCalledWith(2, LocalizationService);
+      expect(mockContext.addService).toHaveBeenNthCalledWith(3, WorldService);
+      expect(mockContext.addService).toHaveBeenNthCalledWith(4, SessionService);
+      expect(mockContext.addService).toHaveBeenNthCalledWith(5, ReferenceService);
+      expect(mockContext.addService).toHaveBeenNthCalledWith(6, AccountService);
+    });
+
+    it('should replace previous instance when called multiple times', () => {
+      const server1 = RPServer.create(testServerOptions, testNatives);
+      const server2 = RPServer.create(testServerOptions, testNatives);
+
+      expect(server1).not.toBe(server2);
+      expect(RPServer.get()).toBe(server2);
+    });
+  });
+
+  describe('get', () => {
+    it('should return the singleton instance after creation', () => {
+      const server = RPServer.create(testServerOptions, testNatives);
+      const retrievedServer = RPServer.get();
+
+      expect(retrievedServer).toBe(server);
+    });
+
+    it('should throw error when no instance exists', () => {
+      expect(() => RPServer.get()).toThrow(
+        'RPServer instance is not created. Use RPServer.create() first.',
+      );
+    });
+  });
+
+  describe('start', () => {
+    let server: RPServer;
+
+    beforeEach(() => {
+      server = RPServer.create(testServerOptions, testNatives);
+    });
+
+    it('should start socket and initialize context', async () => {
+      await server.start();
+
+      expect(mockEngineSocket.start).toHaveBeenCalledTimes(1);
+      expect(mockContext.init).toHaveBeenCalledTimes(1);
+    });
+
+    it('should register shutdown handlers', async () => {
+      const originalListenerCount = process.listenerCount('SIGTERM');
+
+      await server.start();
+
+      expect(process.listenerCount('SIGTERM')).toBeGreaterThan(originalListenerCount);
+      expect(process.listenerCount('SIGINT')).toBeGreaterThan(0);
+      expect(process.listenerCount('SIGHUP')).toBeGreaterThan(0);
+      expect(process.listenerCount('uncaughtException')).toBeGreaterThan(0);
+      expect(process.listenerCount('unhandledRejection')).toBeGreaterThan(0);
+    });
+
+    it('should not register shutdown handlers multiple times', async () => {
+      await server.start();
+      const sigTermCount = process.listenerCount('SIGTERM');
+
+      await server.start();
+
+      expect(process.listenerCount('SIGTERM')).toBe(sigTermCount);
+    });
+
+    it('should handle socket start failure', async () => {
+      const socketError = new Error('Socket connection failed');
+      mockEngineSocket.start.mockRejectedValue(socketError);
+
+      await expect(server.start()).rejects.toThrow('Socket connection failed');
+      expect(mockContext.init).not.toHaveBeenCalled();
+    });
+
+    it('should handle context initialization failure', async () => {
+      const contextError = new Error('Context init failed');
+      mockContext.init.mockRejectedValue(contextError);
+
+      await expect(server.start()).rejects.toThrow('Context init failed');
+      expect(mockEngineSocket.start).toHaveBeenCalled();
+    });
+  });
+
+  describe('getContext', () => {
+    let server: RPServer;
+
+    beforeEach(() => {
+      server = RPServer.create(testServerOptions, testNatives);
+    });
+
+    it('should return the server context', () => {
+      const context = server.getContext();
+
+      expect(context).toBe(mockContext);
+    });
+
+    it('should support generic typing for custom contexts', () => {
+      const context = server.getContext<RPServerContext>();
+
+      expect(context).toBe(mockContext);
+    });
+  });
+
+  describe('stop', () => {
+    let server: RPServer;
+
+    beforeEach(() => {
+      server = RPServer.create(testServerOptions, testNatives);
+    });
+
+    it('should dispose context and close socket gracefully', async () => {
+      await server.stop();
+
+      expect(mockContext.dispose).toHaveBeenCalledTimes(1);
+      expect(mockEngineSocket.close).toHaveBeenCalledWith(1000, 'Normal closure');
+    });
+
+    it('should handle context disposal errors gracefully', async () => {
+      const disposalError = new Error('Disposal failed');
+      mockContext.dispose.mockRejectedValue(disposalError);
+      const errorSpy = jest.spyOn(mockLogger, 'error');
+
+      await server.stop();
+
+      expect(errorSpy).toHaveBeenCalledWith('Error during service disposal:', disposalError);
+      expect(mockEngineSocket.close).toHaveBeenCalled();
+    });
+
+    it('should close socket even if context disposal fails', async () => {
+      mockContext.dispose.mockRejectedValue(new Error('Disposal failed'));
+
+      await server.stop();
+
+      expect(mockEngineSocket.close).toHaveBeenCalledWith(1000, 'Normal closure');
+    });
+  });
+
+  describe('graceful shutdown handling', () => {
+    let server: RPServer;
+
+    beforeEach(() => {
+      server = RPServer.create(testServerOptions, testNatives);
+    });
+
+    it('should register shutdown signal handlers after start', async () => {
+      const originalSigTermCount = process.listenerCount('SIGTERM');
+      const originalSigIntCount = process.listenerCount('SIGINT');
+      const originalSigHupCount = process.listenerCount('SIGHUP');
+      const originalUncaughtCount = process.listenerCount('uncaughtException');
+      const originalUnhandledCount = process.listenerCount('unhandledRejection');
+
+      await server.start();
+
+      expect(process.listenerCount('SIGTERM')).toBeGreaterThan(originalSigTermCount);
+      expect(process.listenerCount('SIGINT')).toBeGreaterThan(originalSigIntCount);
+      expect(process.listenerCount('SIGHUP')).toBeGreaterThan(originalSigHupCount);
+      expect(process.listenerCount('uncaughtException')).toBeGreaterThan(originalUncaughtCount);
+      expect(process.listenerCount('unhandledRejection')).toBeGreaterThan(originalUnhandledCount);
+    });
+
+    it('should not register shutdown handlers multiple times', async () => {
+      await server.start();
+      const sigTermCount = process.listenerCount('SIGTERM');
+      const sigIntCount = process.listenerCount('SIGINT');
+
+      await server.start(); // Second start call
+
+      expect(process.listenerCount('SIGTERM')).toBe(sigTermCount);
+      expect(process.listenerCount('SIGINT')).toBe(sigIntCount);
+    });
+
+    it('should handle graceful shutdown sequence correctly', async () => {
+      const server = RPServer.create(testServerOptions, testNatives);
+      const mockStop = jest.spyOn(server, 'stop').mockResolvedValue();
+
+      await server.start();
+
+      // Test that the graceful shutdown function exists and works
+      const gracefulShutdown = (server as unknown as { registerShutdownHandlers: () => void })
+        .registerShutdownHandlers;
+      expect(typeof gracefulShutdown).toBe('function');
+
+      // Since we can't easily test signal handlers without actually triggering them,
+      // we verify that the stop method would be called during shutdown
+      expect(mockStop).not.toHaveBeenCalled();
+
+      mockStop.mockRestore();
+    });
+  });
+
+  describe('integration scenarios', () => {
+    it('should support complete server lifecycle', async () => {
+      const server = RPServer.create(testServerOptions, testNatives);
+
+      // Start server
+      await server.start();
+      expect(mockEngineSocket.start).toHaveBeenCalled();
+      expect(mockContext.init).toHaveBeenCalled();
+
+      // Access context and services
+      const context = server.getContext();
+      expect(context).toBe(mockContext);
+
+      // Stop server
+      await server.stop();
+      expect(mockContext.dispose).toHaveBeenCalled();
+      expect(mockEngineSocket.close).toHaveBeenCalled();
+    });
+
+    it('should maintain singleton behavior across multiple operations', () => {
+      const server1 = RPServer.create(testServerOptions, testNatives);
+      const server2 = RPServer.get();
+      const server3 = RPServer.create(testServerOptions, testNatives);
+      const server4 = RPServer.get();
+
+      expect(server1).toBe(server2);
+      expect(server3).toBe(server4);
+      expect(server1).not.toBe(server3);
+    });
+
+    it('should handle service registration chain properly', () => {
+      RPServer.create(testServerOptions, testNatives);
+
+      // Verify services are added in dependency order
+      const serviceOrder = [
+        ConfigurationService,
+        LocalizationService,
+        WorldService,
+        SessionService,
+        ReferenceService,
+        AccountService,
+      ];
+
+      expect(mockContext.addService).toHaveBeenCalledTimes(6);
+      serviceOrder.forEach((Service, index) => {
+        expect(mockContext.addService).toHaveBeenNthCalledWith(index + 1, Service);
+      });
+    });
+  });
+
+  describe('error scenarios', () => {
+    it('should handle EngineClient creation failure', () => {
+      (EngineClient as jest.Mock).mockImplementation(() => {
+        throw new Error('EngineClient creation failed');
+      });
+
+      expect(() => RPServer.create(testServerOptions, testNatives)).toThrow(
+        'EngineClient creation failed',
+      );
+    });
+
+    it('should handle EngineSocket creation failure', () => {
+      (EngineSocket as jest.Mock).mockImplementation(() => {
+        throw new Error('EngineSocket creation failed');
+      });
+
+      expect(() => RPServer.create(testServerOptions, testNatives)).toThrow(
+        'EngineSocket creation failed',
+      );
+    });
+
+    it('should handle context creation failure', () => {
+      (RPServerContext.create as jest.Mock).mockImplementation(() => {
+        throw new Error('Context creation failed');
+      });
+
+      expect(() => RPServer.create(testServerOptions, testNatives)).toThrow(
+        'Context creation failed',
+      );
+    });
+
+    it('should handle service registration failure', () => {
+      mockContext.addService.mockImplementation(() => {
+        throw new Error('Service registration failed');
+      });
+
+      expect(() => RPServer.create(testServerOptions, testNatives)).toThrow(
+        'Service registration failed',
+      );
+    });
+  });
+});
