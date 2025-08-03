@@ -3,7 +3,7 @@ import { Reference, ReferenceCategory } from '@bitzonegaming/roleplay-engine-sdk
 export type CategoryReferenceId = string;
 
 export type CategoryReferenceIdParam =
-  | string
+  | CategoryReferenceId
   | { category: ReferenceCategory; referenceId: string };
 
 export interface RPReference extends Reference {

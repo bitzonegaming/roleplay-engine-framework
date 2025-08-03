@@ -10,7 +10,7 @@ type ErrorHandler = (error: Error, event: string, payload: unknown) => void;
  *
  * Provides automatic async error handling and type-safe event emission
  */
-export class RPEventEmitter<Events extends Record<string, unknown>> {
+export class RPEventEmitter<Events> {
   private emitter = new NodeEventEmitter();
   private errorHandler?: ErrorHandler;
 

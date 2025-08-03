@@ -3,7 +3,7 @@
  */
 import { RPEventEmitter } from './event-emitter';
 
-interface TestEvents extends Record<string, unknown> {
+interface TestEvents {
   testEvent: { data: string };
   numberEvent: { value: number };
   errorEvent: { error: Error };

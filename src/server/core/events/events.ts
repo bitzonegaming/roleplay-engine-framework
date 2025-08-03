@@ -33,6 +33,15 @@ import { SocketSoundEnabled } from '../../socket/events/socket-sound-enabled';
 import { RPCameraUpdated } from '../../domains/world/events/camera-updated';
 import { RPSoundCreated } from '../../domains/world/events/sound-created';
 import { RPSoundUpdated } from '../../domains/world/events/sound-updated';
+import { SocketMetricsUpdated } from '../../socket/events/socket-metrics-updated';
+import { RPReferenceMetricsUpdated } from '../../domains/reference/events/reference-metrics-updated';
+import { SocketSegmentDefinitionCreated } from '../../socket/events/socket-segment-definition-created';
+import { SocketSegmentDefinitionUpdated } from '../../socket/events/socket-segment-definition-updated';
+import { SocketSegmentDefinitionRemoved } from '../../socket/events/socket-segment-definition-removed';
+import { SocketSegmentCreated } from '../../socket/events/socket-segment-created';
+import { SocketSegmentRemoved } from '../../socket/events/socket-segment-removed';
+import { RPSegmentCreated } from '../../domains/reference/events/segment-created';
+import { RPSegmentRemoved } from '../../domains/reference/events/segment-removed';
 
 import { RPServerEventEmitterError } from './error';
 
@@ -69,6 +78,13 @@ export interface RPServerEvents {
   socketSessionFinished: SocketSessionFinished;
   // SOCKET - ACCOUNT
   socketAccountUsernameChanged: SocketAccountUsernameChanged;
+  // SOCKET- REFERENCE
+  socketMetricsUpdated: SocketMetricsUpdated;
+  socketSegmentDefinitionCreated: SocketSegmentDefinitionCreated;
+  socketSegmentDefinitionUpdated: SocketSegmentDefinitionUpdated;
+  socketSegmentDefinitionRemoved: SocketSegmentDefinitionRemoved;
+  socketSegmentCreated: SocketSegmentCreated;
+  socketSegmentRemoved: SocketSegmentRemoved;
 
   // CONFIGURATION
   configurationUpdated: RPConfigurationUpdated;
@@ -98,5 +114,8 @@ export interface RPServerEvents {
   // ACCOUNT
   accountUsernameChanged: RPAccountUsernameChanged;
 
-  [key: string]: unknown;
+  // REFERENCE
+  referenceMetricsUpdated: RPReferenceMetricsUpdated;
+  segmentCreated: RPSegmentCreated;
+  segmentRemoved: RPSegmentRemoved;
 }

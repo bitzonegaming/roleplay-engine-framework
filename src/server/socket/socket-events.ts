@@ -29,11 +29,17 @@ export enum IncomingSocketEvents {
 
   // ACCOUNT
   AccountUsernameChanged = 'account.usernameChanged',
+
+  // REFERENCE
+  MetricsUpdated = 'metrics.updated',
+  SegmentDefinitionCreated = 'segmentDefinition.created',
+  SegmentDefinitionUpdated = 'segmentDefinition.updated',
+  SegmentDefinitionRemoved = 'segmentDefinition.removed',
+  SegmentCreated = 'segment.created',
+  SegmentRemoved = 'segment.removed',
 }
 
-export const IncomingSocketEventsMap: {
-  [K in IncomingSocketEvents]: keyof RPServerEvents;
-} = {
+export const IncomingSocketEventsMap = {
   [IncomingSocketEvents.ConfigurationUpdated]: 'socketConfigurationUpdated',
   [IncomingSocketEvents.SessionStarted]: 'socketSessionStarted',
   [IncomingSocketEvents.SessionFinished]: 'socketSessionFinished',
@@ -53,7 +59,13 @@ export const IncomingSocketEventsMap: {
   [IncomingSocketEvents.SoundUpdated]: 'socketSoundUpdated',
   [IncomingSocketEvents.SoundEnabled]: 'socketSoundEnabled',
   [IncomingSocketEvents.SoundDisabled]: 'socketSoundDisabled',
-};
+  [IncomingSocketEvents.MetricsUpdated]: 'socketMetricsUpdated',
+  [IncomingSocketEvents.SegmentDefinitionCreated]: 'socketSegmentDefinitionCreated',
+  [IncomingSocketEvents.SegmentDefinitionUpdated]: 'socketSegmentDefinitionUpdated',
+  [IncomingSocketEvents.SegmentDefinitionRemoved]: 'socketSegmentDefinitionRemoved',
+  [IncomingSocketEvents.SegmentCreated]: 'socketSegmentCreated',
+  [IncomingSocketEvents.SegmentRemoved]: 'socketSegmentRemoved',
+} satisfies { [K in IncomingSocketEvents]: keyof RPServerEvents };
 
 export enum OutgoingSocketEvents {
   Connected = 'connected',

@@ -1,10 +1,33 @@
-import { Metric } from '@bitzonegaming/roleplay-engine-sdk';
+import { Metric, MetricMainKey } from '@bitzonegaming/roleplay-engine-sdk';
 
-import { CategoryReferenceId } from './reference';
+export type MetricKey = string;
 
-export type MetricId = string;
+export type MetricValue = number | string | boolean | object[] | Map<string, object>;
 
-export type RPMetric = Metric & {
-  id: MetricId;
-  categoryReferenceId: CategoryReferenceId;
-};
+export function getMetricKey(metric: Metric) {
+  return generateMetricKey(metric.key, {
+    subKey: metric.subKey,
+    scope: metric.scope,
+  });
+}
+
+export function generateMetricKey(
+  mainKey: MetricMainKey,
+  options?: {
+    subKey?: string;
+    scope?: { type: string; key: string };
+  },
+) {
+  let key = '';
+  if (options?.scope) {
+    key += `${options.scope.type}:${options.scope.key}:`;
+  }
+
+  key += mainKey;
+
+  if (options?.subKey) {
+    key += `:${options.subKey}`;
+  }
+
+  return key;
+}

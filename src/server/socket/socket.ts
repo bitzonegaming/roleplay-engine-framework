@@ -199,7 +199,7 @@ export class EngineSocket {
     }
 
     const key = IncomingSocketEventsMap[raw];
-    this.eventEmitter.emit(key, msg.data);
+    this.eventEmitter.emit(key as keyof RPServerEvents, msg.data as RPServerEvents[typeof key]);
   }
 
   private send<Data>(
