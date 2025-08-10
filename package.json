@@ -1,6 +1,6 @@
 {
   "name": "@bitzonegaming/gamemode-sdk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Roleplay Engine Gamemode SDK",
   "main": "index.js",
   "types": "index.d.ts",
@@ -39,24 +39,21 @@
   },
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.js"
+      "types": "./index.d.ts",
+      "import": "./index.js",
+      "require": "./index.js"
     },
     "./server": {
-      "types": "./dist/server/index.d.ts",
-      "import": "./dist/server/index.js",
-      "require": "./dist/server/index.js"
+      "types": "./server/index.d.ts",
+      "import": "./server/index.js",
+      "require": "./server/index.js"
     },
     "./client": {
-      "types": "./dist/client/index.d.ts",
-      "import": "./dist/client/index.js",
-      "require": "./dist/client/index.js"
+      "types": "./client/index.d.ts",
+      "import": "./client/index.js",
+      "require": "./client/index.js"
     }
   },
-  "files": [
-    "dist"
-  ],
   "publishConfig": {
     "access": "public"
   },
