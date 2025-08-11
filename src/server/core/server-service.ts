@@ -23,7 +23,7 @@ export type RPServerEventHandlerMethods = {
  */
 export type RPServerServiceCtor<C extends RPServerContext = RPServerContext> = new (
   ctx: C,
-) => RPServerService;
+) => RPServerService<C>;
 
 /**
  * Abstract base class for all server services in the Roleplay Engine.
@@ -36,6 +36,8 @@ export type RPServerServiceCtor<C extends RPServerContext = RPServerContext> = n
  *
  * Services extend this class to implement domain-specific functionality
  * such as account management, session handling, world management, etc.
+ *
+ * @template C - The server context type (defaults to RPServerContext)
  *
  * @example
  * ```typescript
@@ -51,8 +53,18 @@ export type RPServerServiceCtor<C extends RPServerContext = RPServerContext> = n
  *   }
  * }
  * ```
+ *
+ * @example With custom context
+ * ```typescript
+ * export class PlayerService extends RPServerService<GTA5ServerContext> {
+ *   // this.context is now typed as GTA5ServerContext
+ *   public getPlayer(playerId: string) {
+ *     return this.context.players.get(playerId);
+ *   }
+ * }
+ * ```
  */
-export abstract class RPServerService {
+export abstract class RPServerService<C extends RPServerContext = RPServerContext> {
   public readonly eventHandlers: RPServerEventHandlerMethods;
 
   protected readonly eventEmitter: RPEventEmitter<RPServerEvents>;
@@ -69,7 +81,7 @@ export abstract class RPServerService {
    *
    * @param context - The server context providing shared infrastructure
    */
-  public constructor(private readonly context: RPServerContext) {
+  public constructor(protected readonly context: C) {
     this.eventEmitter = context.eventEmitter;
     this.hookBus = context.hookBus;
     this.logger = context.logger;
@@ -168,7 +180,7 @@ export abstract class RPServerService {
    * const account = await accountService.getAccount(accountId);
    * ```
    */
-  public getService<Service extends RPServerService>(
+  protected getService<Service extends RPServerService>(
     ServiceConstructor: new (context: RPServerContext) => Service,
   ): Service {
     return this.context.getService(ServiceConstructor);

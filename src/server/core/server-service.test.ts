@@ -32,6 +32,12 @@ class TestService extends RPServerService {
     return 'test';
   }
 
+  public testGetService<Service extends RPServerService>(
+    ServiceConstructor: new (context: RPServerContext) => Service,
+  ): Service {
+    return this.getService(ServiceConstructor);
+  }
+
   @OnServer('sessionStarted')
   public onSessionStarted(_payload: { sessionId: string; sessionToken: string }): void {
     // Test event handler
@@ -167,7 +173,7 @@ describe('RPServerService', () => {
 
       (mockContext.getService as jest.Mock).mockReturnValue(mockAnotherService);
 
-      const service = testService.getService(AnotherService);
+      const service = testService.testGetService(AnotherService);
 
       expect(mockContext.getService).toHaveBeenCalledWith(AnotherService);
       expect(service).toBe(mockAnotherService);
@@ -348,6 +354,85 @@ describe('RPServerService', () => {
 
       expect(service.derivedInitCalled).toBe(true);
       expect(service.baseInitCalled).toBe(true);
+    });
+  });
+
+  describe('generic context support', () => {
+    it('should support custom context types', () => {
+      // Define a custom context interface extending RPServerContext
+      interface CustomServerContext extends RPServerContext {
+        customProperty: string;
+        customMethod(): string;
+      }
+
+      // Create a service that uses the custom context
+      class CustomContextService extends RPServerService<CustomServerContext> {
+        public getCustomData(): string {
+          // this.context is now typed as CustomServerContext
+          return this.context.customProperty + ' - ' + this.context.customMethod();
+        }
+      }
+
+      // Mock the custom context
+      const customContext = {
+        ...mockContext,
+        customProperty: 'custom-data',
+        customMethod: () => 'custom-method-result',
+      } as CustomServerContext;
+
+      const customService = new CustomContextService(customContext);
+
+      // Verify the service can access custom context properties
+      expect(customService.getCustomData()).toBe('custom-data - custom-method-result');
+    });
+
+    it('should default to RPServerContext when no generic is specified', () => {
+      class DefaultContextService extends RPServerService {
+        public getContext(): RPServerContext {
+          return this.context; // Should be typed as RPServerContext
+        }
+      }
+
+      const defaultService = new DefaultContextService(mockContext);
+      expect(defaultService.getContext()).toBe(mockContext);
+    });
+
+    it('should demonstrate GTA5 server context example', () => {
+      // Example: GTA5 server context
+      interface GTA5ServerContext extends RPServerContext {
+        gta5World: {
+          getPlayer: (id: string) => { name: string; vehicle?: string };
+          getVehicle: (id: string) => { model: string; position: [number, number, number] };
+        };
+      }
+
+      // Example: Player management service for GTA5
+      class PlayerService extends RPServerService<GTA5ServerContext> {
+        public getPlayerVehicle(playerId: string): string | undefined {
+          const player = this.context.gta5World.getPlayer(playerId);
+          return player.vehicle;
+        }
+      }
+
+      // Mock GTA5 context
+      const gta5Context = {
+        ...mockContext,
+        gta5World: {
+          getPlayer: (id: string) => ({
+            name: `Player${id}`,
+            vehicle: id === '123' ? 'infernus' : undefined,
+          }),
+          getVehicle: (_id: string) => ({
+            model: 'infernus',
+            position: [0, 0, 0] as [number, number, number],
+          }),
+        },
+      } as GTA5ServerContext;
+
+      const playerService = new PlayerService(gta5Context);
+
+      expect(playerService.getPlayerVehicle('123')).toBe('infernus');
+      expect(playerService.getPlayerVehicle('456')).toBeUndefined();
     });
   });
 });

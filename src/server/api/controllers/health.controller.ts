@@ -1,6 +1,7 @@
 import { RPServerContext } from '../../core/context';
 import { ApiController } from '../types';
 import { Controller, Get } from '../decorators';
+import { getVersion } from '../../../version';
 
 /**
  * Health check controller
@@ -21,6 +22,7 @@ export class HealthController extends ApiController {
     return {
       status: 'healthy',
       timestamp: new Date().toISOString(),
+      engineVersion: getVersion(),
     };
   }
 }

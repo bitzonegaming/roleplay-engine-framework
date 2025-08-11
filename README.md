@@ -1,17 +1,17 @@
-# Bitzone RolePlay Engine - Gamemode SDK
+# RolePlay Engine Framework
 
-A TypeScript SDK for building game servers with the Bitzone RolePlay Engine platform.
+A TypeScript framework for building game servers with the Bitzone RolePlay Engine platform.
 
 ## Installation
 
 ```bash
-npm install @bitzonegaming/gamemode-sdk
+npm install @bitzonegaming/roleplay-engine-framework
 ```
 
 ## Quick Start
 
 ```typescript
-import {RPServer} from '@bitzonegaming/gamemode-sdk';
+import {RPServer} from '@bitzonegaming/roleplay-engine-framework';
 
 const server = new RPServer({
     apiKeyId: 'your-api-key-id',
@@ -26,7 +26,7 @@ await server.start();
 ## Event Handling
 
 ```typescript
-import {RPServerService, OnServer} from '@bitzonegaming/gamemode-sdk';
+import {RPServerService, OnServer} from '@bitzonegaming/roleplay-engine-framework';
 
 export class MyGameService extends RPServerService {
     @OnServer('playerConnecting')
