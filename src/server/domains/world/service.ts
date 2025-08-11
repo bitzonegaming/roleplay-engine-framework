@@ -139,7 +139,7 @@ export class WorldService extends RPServerService {
    * ```
    */
   public createCamera(request: CreateCameraRequest): Promise<RPCamera> {
-    return this.getApi(CameraApi)
+    return this.getEngineApi(CameraApi)
       .createCamera(request)
       .then((camera) => {
         this.cameras.set(camera.id, camera);
@@ -169,7 +169,7 @@ export class WorldService extends RPServerService {
    * ```
    */
   public createSound(request: CreateSoundRequest): Promise<RPSound> {
-    return this.getApi(SoundApi)
+    return this.getEngineApi(SoundApi)
       .createSound(request)
       .then((sound) => {
         this.sounds.set(sound.id, sound);
@@ -235,7 +235,7 @@ export class WorldService extends RPServerService {
 
   private async refreshCameras() {
     this.cameras = new Map(
-      (await this.getApi(CameraApi).getCameras({ noCache: true })).map((camera) => [
+      (await this.getEngineApi(CameraApi).getCameras({ noCache: true })).map((camera) => [
         camera.id,
         camera,
       ]),
@@ -244,7 +244,10 @@ export class WorldService extends RPServerService {
 
   private async refreshSounds() {
     this.sounds = new Map(
-      (await this.getApi(SoundApi).getSounds({ noCache: true })).map((sound) => [sound.id, sound]),
+      (await this.getEngineApi(SoundApi).getSounds({ noCache: true })).map((sound) => [
+        sound.id,
+        sound,
+      ]),
     );
   }
 }

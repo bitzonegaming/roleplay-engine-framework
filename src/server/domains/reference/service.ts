@@ -163,6 +163,30 @@ export class ReferenceService extends RPServerService {
   }
 
   /**
+   * Checks if an access policy exists in any of the specified segment definitions.
+   *
+   * Iterates through the provided segment definition IDs and checks if any of them
+   * contain the specified access policy in their access policies list.
+   *
+   * @param accessPolicy - The access policy to search for
+   * @param segmentDefinitionIds - Array of segment definition IDs to check
+   * @returns True if any segment definition contains the access policy, false otherwise
+   */
+  public hasAccessPolicyInSegmentDefinitions(
+    accessPolicy: AccessPolicy,
+    segmentDefinitionIds: ReadonlyArray<SegmentDefinitionId>,
+  ): boolean {
+    for (const segmentDefinitionId of segmentDefinitionIds) {
+      const segmentDefinition = this.segmentDefinitions.get(segmentDefinitionId);
+      if (segmentDefinition && segmentDefinition.policy.accessPolicies.includes(accessPolicy)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Checks if a category reference belongs to a specific segment.
    *
    * @param categoryReferenceId - The category reference ID (object with category and referenceId, or string)
@@ -246,14 +270,14 @@ export class ReferenceService extends RPServerService {
 
   private async loadReferenceSegments(categoryReferenceId: CategoryReferenceIdParam) {
     const catRefId = getCategoryReferenceId(categoryReferenceId);
-    const segments = await this.getApi(ReferenceApi).getReferenceSegments(catRefId);
+    const segments = await this.getEngineApi(ReferenceApi).getReferenceSegments(catRefId);
     const set = new Set([...segments.map((p) => p.segmentDefinitionId)]);
     this.referenceSegmentDefinitionIds.set(catRefId, set);
   }
 
   private async loadReferenceMetrics(categoryReferenceId: CategoryReferenceIdParam) {
     const catRefId = getCategoryReferenceId(categoryReferenceId);
-    const metrics = await this.getApi(ReferenceApi).getReferenceMetrics(catRefId);
+    const metrics = await this.getEngineApi(ReferenceApi).getReferenceMetrics(catRefId);
 
     const metricsMap = new Map<MetricKey, MetricValue>([]);
     metrics.forEach((metric) => {
@@ -264,13 +288,13 @@ export class ReferenceService extends RPServerService {
 
   private async loadReference(categoryReferenceId: CategoryReferenceIdParam) {
     const catRefId = getCategoryReferenceId(categoryReferenceId);
-    const ref = await this.getApi(ReferenceApi).getReferenceById(catRefId);
+    const ref = await this.getEngineApi(ReferenceApi).getReferenceById(catRefId);
     await Promise.all([this.loadReferenceMetrics(catRefId), this.loadReferenceSegments(catRefId)]);
     this.references.set(ref.id, ref);
   }
 
   private async preloadSegmentDefinitions() {
-    const segmentDefinitions = await this.getApi(SegmentApi).getSegmentDefinitions();
+    const segmentDefinitions = await this.getEngineApi(SegmentApi).getSegmentDefinitions();
     segmentDefinitions.forEach((segmentDefinition) =>
       this.segmentDefinitions.set(segmentDefinition.id, segmentDefinition),
     );
@@ -285,7 +309,7 @@ export class ReferenceService extends RPServerService {
   private async preloadReferences(category: ReferenceCategory) {
     let pageIndex = 0;
     while (true) {
-      const refs = await this.getApi(ReferenceApi).getReferences({
+      const refs = await this.getEngineApi(ReferenceApi).getReferences({
         category,
         enabled: true,
         pageIndex,
@@ -304,7 +328,7 @@ export class ReferenceService extends RPServerService {
   private async preloadReferenceMetrics(category: ReferenceCategory) {
     let pageIndex = 0;
     while (true) {
-      const metrics = await this.getApi(MetricApi).getMetrics({
+      const metrics = await this.getEngineApi(MetricApi).getMetrics({
         category,
         pageIndex,
         pageSize: 100,
@@ -331,7 +355,7 @@ export class ReferenceService extends RPServerService {
   private async preloadReferenceSegmentDefinitions(category: ReferenceCategory) {
     let pageIndex = 0;
     while (true) {
-      const segments = await this.getApi(SegmentApi).getSegments({
+      const segments = await this.getEngineApi(SegmentApi).getSegments({
         category,
         pageIndex,
         pageSize: 100,
@@ -426,7 +450,7 @@ export class ReferenceService extends RPServerService {
       return;
     }
 
-    const metrics = await this.getApi(ReferenceApi).getReferenceMetrics(payload.id, {
+    const metrics = await this.getEngineApi(ReferenceApi).getReferenceMetrics(payload.id, {
       fullKeys: payload.keys,
     });
 

@@ -144,12 +144,12 @@ export abstract class RPServerService {
    *
    * @example
    * ```typescript
-   * const accountApi = this.getApi(AccountApi);
+   * const accountApi = this.getEngineApi(AccountApi);
    * const account = await accountApi.getAccountById(accountId);
    * ```
    */
-  protected getApi<Api>(ApiConstructor: new (client: EngineClient) => Api): Api {
-    return this.context.getApi(ApiConstructor);
+  protected getEngineApi<Api>(ApiConstructor: new (client: EngineClient) => Api): Api {
+    return this.context.getEngineApi(ApiConstructor);
   }
 
   /**

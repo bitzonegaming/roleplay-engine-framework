@@ -2,7 +2,6 @@ import {
   AccountApi,
   AccountAuthRequest,
   DiscordApi,
-  EngineError,
   ExternalLoginAuthRequest,
   GrantAccessResult,
   ImplicitDiscordAuthRequest,
@@ -78,7 +77,7 @@ export class AccountService extends RPServerService {
       return account;
     }
 
-    return this.getApi(AccountApi).getAccountById(accountId, { includeSignInOptions: true });
+    return this.getEngineApi(AccountApi).getAccountById(accountId, { includeSignInOptions: true });
   }
 
   /**
@@ -101,7 +100,7 @@ export class AccountService extends RPServerService {
    * ```
    */
   public registerAccount(request: RegisterAccountRequest): Promise<RPAccount> {
-    return this.getApi(AccountApi).registerAccount(request);
+    return this.getEngineApi(AccountApi).registerAccount(request);
   }
 
   /**
@@ -127,7 +126,7 @@ export class AccountService extends RPServerService {
    * ```
    */
   public async authWithPassword(request: AccountAuthRequest): Promise<GrantAccessResult> {
-    return this.getApi(AccountApi).authWithPassword(request);
+    return this.getEngineApi(AccountApi).authWithPassword(request);
   }
 
   /**
@@ -143,7 +142,7 @@ export class AccountService extends RPServerService {
   public preAuthExternalLogin(
     request: ExternalLoginPreAuthRequest,
   ): Promise<ExternalLoginPreAuthResult> {
-    return this.getApi(AccountApi).preAuthExternalLogin(request);
+    return this.getEngineApi(AccountApi).preAuthExternalLogin(request);
   }
 
   /**
@@ -157,7 +156,7 @@ export class AccountService extends RPServerService {
    * @throws {EngineError} When external authentication fails or tokens are invalid
    */
   public authExternalLogin(request: ExternalLoginAuthRequest): Promise<GrantAccessResult> {
-    return this.getApi(AccountApi).authExternalLogin(request);
+    return this.getEngineApi(AccountApi).authExternalLogin(request);
   }
 
   /**
@@ -171,7 +170,7 @@ export class AccountService extends RPServerService {
    * @throws {EngineError} When Discord authentication fails
    */
   public async authDiscordImplicitFlow(request: ImplicitDiscordAuthRequest) {
-    return this.getApi(DiscordApi).authImplicitFlow(request);
+    return this.getEngineApi(DiscordApi).authImplicitFlow(request);
   }
 
   /**
@@ -185,7 +184,7 @@ export class AccountService extends RPServerService {
    * @throws {EngineError} When Discord OAuth authentication fails
    */
   public async authDiscordOAuthFlow(request: DiscordOAuthTokenRequest) {
-    return this.getApi(DiscordApi).authOAuthFlow(request);
+    return this.getEngineApi(DiscordApi).authOAuthFlow(request);
   }
 
   /**
@@ -199,7 +198,7 @@ export class AccountService extends RPServerService {
    * @throws {EngineError} When Discord user is not found or access is denied
    */
   public async getDiscordUser(discordUserId: string) {
-    return this.getApi(DiscordApi).getDiscordUserById(discordUserId);
+    return this.getEngineApi(DiscordApi).getDiscordUserById(discordUserId);
   }
 
   @OnServer('sessionAuthorized')

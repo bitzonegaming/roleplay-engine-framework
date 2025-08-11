@@ -41,7 +41,7 @@ describe('ConfigurationService', () => {
       logger: mockLogger,
       eventEmitter: mockEventEmitter,
       hookBus: mockHookBus,
-      getApi: jest.fn().mockImplementation((apiType) => {
+      getEngineApi: jest.fn().mockImplementation((apiType) => {
         if (apiType.name === 'ConfigurationApi') {
           return mockConfigurationApi;
         }
@@ -59,7 +59,7 @@ describe('ConfigurationService', () => {
 
       const allConfigs = configurationService.getConfigs();
       expect(allConfigs).toEqual(testConfigs);
-      expect(mockContext.getApi).toHaveBeenCalled();
+      expect(mockContext.getEngineApi).toHaveBeenCalled();
     });
 
     it('should log initialization step', async () => {
@@ -144,7 +144,7 @@ describe('ConfigurationService', () => {
           { ...testConfigs[2], value: false },
         ];
 
-        (mockContext.getApi as jest.Mock).mockImplementation((apiType) => {
+        (mockContext.getEngineApi as jest.Mock).mockImplementation((apiType) => {
           if (apiType.name === 'ConfigurationApi') {
             return {
               getConfiguration: jest.fn().mockResolvedValue(updatedConfigs),
@@ -168,7 +168,7 @@ describe('ConfigurationService', () => {
 
       it('should handle API call parameters correctly', async () => {
         const mockGetConfiguration = jest.fn().mockResolvedValue(testConfigs);
-        (mockContext.getApi as jest.Mock).mockImplementation((apiType) => {
+        (mockContext.getEngineApi as jest.Mock).mockImplementation((apiType) => {
           if (apiType.name === 'ConfigurationApi') {
             return { getConfiguration: mockGetConfiguration };
           }
@@ -193,7 +193,7 @@ describe('ConfigurationService', () => {
           { ...testConfigs[1], value: 'Super Server' },
         ];
 
-        (mockContext.getApi as jest.Mock).mockImplementation((apiType) => {
+        (mockContext.getEngineApi as jest.Mock).mockImplementation((apiType) => {
           if (apiType.name === 'ConfigurationApi') {
             return {
               getConfiguration: jest.fn().mockResolvedValue(updatedConfigs),
@@ -233,7 +233,7 @@ describe('ConfigurationService', () => {
     });
 
     it('should handle empty configuration sets correctly', async () => {
-      (mockContext.getApi as jest.Mock).mockImplementation((apiType) => {
+      (mockContext.getEngineApi as jest.Mock).mockImplementation((apiType) => {
         if (apiType.name === 'ConfigurationApi') {
           return {
             getConfiguration: jest.fn().mockResolvedValue([]),
@@ -265,7 +265,7 @@ describe('ConfigurationService', () => {
         },
       ];
 
-      (mockContext.getApi as jest.Mock).mockImplementation((apiType) => {
+      (mockContext.getEngineApi as jest.Mock).mockImplementation((apiType) => {
         if (apiType.name === 'ConfigurationApi') {
           return {
             getConfiguration: jest.fn().mockResolvedValue(newConfigs),

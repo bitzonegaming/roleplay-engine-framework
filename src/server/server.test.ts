@@ -17,12 +17,14 @@ import { WorldService } from './domains/world/service';
 import { ConfigurationService } from './domains/configuration/service';
 import { LocalizationService } from './domains/localization/service';
 import { ReferenceService } from './domains/reference/service';
+import { ApiServer } from './api/api-server';
 
 // Mock external dependencies
 jest.mock('@bitzonegaming/roleplay-engine-sdk');
 jest.mock('./socket/socket');
 jest.mock('./s2c/server-to-client-event-handler');
 jest.mock('./core/context');
+jest.mock('./api/api-server');
 
 describe('RPServer', () => {
   let mockLogger: MockLogger;
@@ -31,6 +33,7 @@ describe('RPServer', () => {
   let mockS2CEventHandler: jest.Mocked<RPS2CEventHandler>;
   let mockContext: jest.Mocked<RPServerContext>;
   let mockEngineClient: jest.Mocked<EngineClient>;
+  let mockApiServer: jest.Mocked<ApiServer>;
 
   const testServerOptions: RPServerOptions = {
     serverId: 'test-server',
@@ -39,6 +42,11 @@ describe('RPServer', () => {
     apiKeyId: 'test-key-id',
     apiKeySecret: 'test-key-secret',
     timeout: 15000,
+    api: {
+      port: 0, // Use random port to avoid conflicts
+      host: '127.0.0.1',
+      gamemodeApiKeyHash: 'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3',
+    },
   };
 
   const testNatives: RPServerNatives = {
@@ -46,7 +54,6 @@ describe('RPServer', () => {
   };
 
   beforeEach(() => {
-    // Clear singleton instance before each test
     (RPServer as unknown as { instance: RPServer | undefined }).instance = undefined;
 
     mockLogger = new MockLogger();
@@ -58,7 +65,7 @@ describe('RPServer', () => {
 
     // Setup mocks
     mockEngineClient = {
-      getApi: jest.fn(),
+      getEngineApi: jest.fn(),
     } as unknown as jest.Mocked<EngineClient>;
 
     mockEngineSocket = {
@@ -69,6 +76,14 @@ describe('RPServer', () => {
     mockS2CEventHandler = {
       handleEvent: jest.fn(),
     } as unknown as jest.Mocked<RPS2CEventHandler>;
+
+    mockApiServer = {
+      start: jest.fn().mockResolvedValue(undefined),
+      stop: jest.fn().mockResolvedValue(undefined),
+      registerController: jest.fn().mockReturnThis(),
+      getFastify: jest.fn(),
+      getOpenApiSchema: jest.fn(),
+    } as unknown as jest.Mocked<ApiServer>;
 
     mockContext = {
       init: jest.fn().mockResolvedValue(undefined),
@@ -82,6 +97,7 @@ describe('RPServer', () => {
     (EngineClient as jest.Mock).mockImplementation(() => mockEngineClient);
     (EngineSocket as jest.Mock).mockImplementation(() => mockEngineSocket);
     (RPS2CEventHandler as jest.Mock).mockImplementation(() => mockS2CEventHandler);
+    (ApiServer as jest.Mock).mockImplementation(() => mockApiServer);
     (RPServerContext.create as jest.Mock).mockReturnValue(mockContext);
 
     testNatives.s2cEventsAdapter = mockS2CEventsAdapter;
@@ -204,6 +220,7 @@ describe('RPServer', () => {
 
       expect(mockEngineSocket.start).toHaveBeenCalledTimes(1);
       expect(mockContext.init).toHaveBeenCalledTimes(1);
+      expect(mockApiServer.start).toHaveBeenCalledTimes(1);
     });
 
     it('should register shutdown handlers', async () => {

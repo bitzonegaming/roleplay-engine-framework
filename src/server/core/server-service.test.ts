@@ -65,7 +65,7 @@ describe('RPServerService', () => {
       logger: mockLogger,
       eventEmitter: mockEventEmitter,
       hookBus: mockHookBus,
-      getApi: jest.fn().mockImplementation((ApiConstructor) => {
+      getEngineApi: jest.fn().mockImplementation((ApiConstructor) => {
         if (ApiConstructor === TestApi) {
           return new TestApi(mockEngineClient);
         }
@@ -131,11 +131,11 @@ describe('RPServerService', () => {
     });
   });
 
-  describe('getApi', () => {
+  describe('getEngineApi', () => {
     it('should get API instance from context', () => {
-      const api = testService['getApi'](TestApi);
+      const api = testService['getEngineApi'](TestApi);
 
-      expect(mockContext.getApi).toHaveBeenCalledWith(TestApi);
+      expect(mockContext.getEngineApi).toHaveBeenCalledWith(TestApi);
       expect(api).toBeInstanceOf(TestApi);
     });
 
@@ -144,15 +144,15 @@ describe('RPServerService', () => {
         constructor(private _client: unknown) {}
       }
 
-      (mockContext.getApi as jest.Mock).mockImplementation((ApiConstructor) => {
+      (mockContext.getEngineApi as jest.Mock).mockImplementation((ApiConstructor) => {
         if (ApiConstructor === AnotherApi) {
           return new AnotherApi(mockEngineClient);
         }
         return new TestApi(mockEngineClient);
       });
 
-      const testApi = testService['getApi'](TestApi);
-      const anotherApi = testService['getApi'](AnotherApi);
+      const testApi = testService['getEngineApi'](TestApi);
+      const anotherApi = testService['getEngineApi'](AnotherApi);
 
       expect(testApi).toBeInstanceOf(TestApi);
       expect(anotherApi).toBeInstanceOf(AnotherApi);

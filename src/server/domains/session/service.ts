@@ -1,6 +1,5 @@
-import { createHmac } from 'crypto';
-
 import {
+  AccessPolicy,
   AuthorizeSessionRequest,
   EngineError,
   LinkCharacterToSessionRequest,
@@ -17,8 +16,10 @@ import { OnServer } from '../../core/events/decorators';
 import { SocketSessionCharacterLinked } from '../../socket/events/socket-session-character-linked';
 import { SocketSessionUpdated } from '../../socket/events/socket-session-updated';
 import { RPPlayerDisconnected } from '../../natives/events/player-disconnected';
+import { ConflictError, ForbiddenError, NotFoundError } from '../../core/errors';
+import { ReferenceService } from '../reference/service';
 
-import { RPSession, SessionId } from './models/session';
+import { generateSessionTokenHash, RPSession, SessionId } from './models/session';
 
 /**
  * Service for managing player sessions in the roleplay server.
@@ -76,27 +77,6 @@ export class SessionService extends RPServerService {
   }
 
   /**
-   * Generates a secure hash for a session token.
-   *
-   * Creates a SHA-256 HMAC hash using the session ID as the key and the session token
-   * as the message. This hash is used for secure token validation and comparison
-   * without storing the actual token in memory.
-   *
-   * @param sessionId - The session ID used as HMAC key
-   * @param sessionToken - The session token to hash
-   * @returns The hex-encoded hash string
-   *
-   * @example
-   * ```typescript
-   * const tokenHash = sessionService.generateTokenHash('sess_12345', 'abc123token');
-   * // Returns: 'a1b2c3d4e5f6...' (hex string)
-   * ```
-   */
-  public generateTokenHash(sessionId: SessionId, sessionToken: string): string {
-    return createHmac('sha256', sessionId).update(sessionToken, 'ascii').digest('hex');
-  }
-
-  /**
    * Authorizes a session using an access token.
    *
    * This method authenticates a player session by validating their access token
@@ -116,7 +96,7 @@ export class SessionService extends RPServerService {
    * ```
    */
   public authorizeSession(sessionId: SessionId, request: AuthorizeSessionRequest) {
-    return this.getApi(SessionApi).authorizeSession(sessionId, request);
+    return this.getEngineApi(SessionApi).authorizeSession(sessionId, request);
   }
 
   /**
@@ -139,14 +119,91 @@ export class SessionService extends RPServerService {
    * ```
    */
   public linkCharacterToSession(sessionId: SessionId, request: LinkCharacterToSessionRequest) {
-    return this.getApi(SessionApi).linkCharacterToSession(sessionId, request);
+    return this.getEngineApi(SessionApi).linkCharacterToSession(sessionId, request);
+  }
+
+  /**
+   * Validates that a session has the required access policy.
+   *
+   * This method checks if the session has the specified access policy and throws
+   * a ForbiddenError if the policy is not granted. Used for authorization checks
+   * before allowing access to protected resources or operations.
+   *
+   * @param sessionId - The unique identifier of the session to validate
+   * @param accessPolicy - The access policy that must be present
+   * @throws {ForbiddenError} When the session lacks the required access policy
+   * @throws {NotFoundError} When the session is not found
+   * @throws {ConflictError} When the session is not authorized
+   *
+   * @example
+   * ```typescript
+   * // Will throw if session doesn't have AccountWrite policy
+   * sessionService.validateAccessPolicy('sess_123', AccessPolicy.AccountWrite);
+   * ```
+   */
+  public validateAccessPolicy(sessionId: SessionId, accessPolicy: AccessPolicy): void {
+    if (!this.hasAccessPolicy(sessionId, accessPolicy)) {
+      throw new ForbiddenError('INSUFFICIENT_ACCESS_LEVEL', { accessPolicy });
+    }
+  }
+
+  /**
+   * Checks if a session has a specific access policy.
+   *
+   * This method determines whether the session has the required access policy
+   * by checking both account-level and character-level segment definitions.
+   * The session must be authorized (have an associated account) to perform
+   * access policy checks.
+   *
+   * @param sessionId - The unique identifier of the session to check
+   * @param accessPolicy - The access policy to verify
+   * @returns True if the session has the access policy, false otherwise
+   * @throws {NotFoundError} When the session is not found
+   * @throws {ConflictError} When the session is not authorized (no account)
+   *
+   * @example
+   * ```typescript
+   * if (sessionService.hasAccessPolicy('sess_123', AccessPolicy.AccountRead)) {
+   *   // Session can read account data
+   *   console.log('Access granted');
+   * }
+   * ```
+   */
+  public hasAccessPolicy(sessionId: SessionId, accessPolicy: AccessPolicy): boolean {
+    const session = this.getSession(sessionId);
+    if (!session) {
+      throw new NotFoundError('SESSION_NOT_FOUND', {});
+    }
+
+    if (!session.account) {
+      throw new ConflictError('SESSION_HAS_NOT_AUTHORIZED', {});
+    }
+
+    const referenceService = this.getService(ReferenceService);
+    if (
+      referenceService.hasAccessPolicyInSegmentDefinitions(
+        accessPolicy,
+        session.account.segmentDefinitionIds,
+      )
+    ) {
+      return true;
+    }
+
+    if (!session.character) {
+      return false;
+    }
+
+    return referenceService.hasAccessPolicyInSegmentDefinitions(
+      accessPolicy,
+      session.character.segmentDefinitionIds,
+    );
   }
 
   @OnServer('playerConnecting')
   private async onPlayerConnecting({ sessionId, ipAddress }: RPPlayerConnecting) {
     try {
-      const { token } = await this.getApi(SessionApi).startSession(sessionId, { ipAddress });
-      const tokenHash = this.generateTokenHash(sessionId, token);
+      const { token } = await this.getEngineApi(SessionApi).startSession(sessionId, { ipAddress });
+      const tokenHash = generateSessionTokenHash(sessionId, token);
       this.sessions.set(sessionId, { id: sessionId, tokenHash });
       this.eventEmitter.emit('sessionStarted', { sessionId, sessionToken: token });
     } catch {
@@ -159,7 +216,7 @@ export class SessionService extends RPServerService {
 
   @OnServer('playerDisconnected')
   private async onPlayerDisconnected({ sessionId, reason }: RPPlayerDisconnected) {
-    await this.getApi(SessionApi).finishSession(sessionId, { endReason: reason });
+    await this.getEngineApi(SessionApi).finishSession(sessionId, { endReason: reason });
   }
 
   @OnServer('socketSessionStarted')
@@ -237,7 +294,7 @@ export class SessionService extends RPServerService {
     }
 
     try {
-      const sessionInfo = await this.getApi(SessionApi).getActiveSessionInfo(sessionId);
+      const sessionInfo = await this.getEngineApi(SessionApi).getActiveSessionInfo(sessionId);
       this.sessions.set(sessionId, {
         ...(this.sessions.get(sessionId) ?? { id: sessionId }),
         ...sessionInfo,
@@ -260,7 +317,7 @@ export class SessionService extends RPServerService {
       return tokenHash;
     }
 
-    const sessionInfo = await this.getApi(SessionApi).getActiveSessionInfo(sessionId);
+    const sessionInfo = await this.getEngineApi(SessionApi).getActiveSessionInfo(sessionId);
     return sessionInfo.tokenHash;
   }
 }

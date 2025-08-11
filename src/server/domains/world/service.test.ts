@@ -12,7 +12,7 @@ import { RPServerHooks } from '../../core/hooks/hooks';
 
 import { WorldService } from './service';
 import { CameraId, RPCamera } from './models/camera';
-import { SoundId, RPSound } from './models/sound';
+import { RPSound, SoundId } from './models/sound';
 
 describe('WorldService', () => {
   let mockLogger: MockLogger;
@@ -69,7 +69,7 @@ describe('WorldService', () => {
       logger: mockLogger,
       eventEmitter: mockEventEmitter,
       hookBus: mockHookBus,
-      getApi: jest.fn().mockImplementation((apiType) => {
+      getEngineApi: jest.fn().mockImplementation((apiType) => {
         if (apiType.name === 'CameraApi') {
           return {
             getCameras: jest.fn().mockResolvedValue([testCamera]),
@@ -96,7 +96,7 @@ describe('WorldService', () => {
 
       expect(worldService.getCamera(testCameraId)).toEqual(testCamera);
       expect(worldService.getSound(testSoundId)).toEqual(testSound);
-      expect(mockContext.getApi).toHaveBeenCalledTimes(2);
+      expect(mockContext.getEngineApi).toHaveBeenCalledTimes(2);
     });
 
     it('should log initialization steps', async () => {
@@ -169,7 +169,7 @@ describe('WorldService', () => {
       const result = await worldService.createCamera(request);
 
       expect(result).toEqual(testCamera);
-      expect(mockContext.getApi).toHaveBeenCalled();
+      expect(mockContext.getEngineApi).toHaveBeenCalled();
       expect(worldService.getCamera(testCameraId)).toEqual(testCamera);
     });
   });
@@ -188,7 +188,7 @@ describe('WorldService', () => {
       const result = await worldService.createSound(request);
 
       expect(result).toEqual(testSound);
-      expect(mockContext.getApi).toHaveBeenCalled();
+      expect(mockContext.getEngineApi).toHaveBeenCalled();
       expect(worldService.getSound(testSoundId)).toEqual(testSound);
     });
   });
@@ -450,7 +450,7 @@ describe('WorldService', () => {
         id: 'cam_updated',
         description: 'Updated Camera',
       };
-      (mockContext.getApi as jest.Mock).mockImplementation((apiType) => {
+      (mockContext.getEngineApi as jest.Mock).mockImplementation((apiType) => {
         if (apiType.name === 'CameraApi') {
           return {
             getCameras: jest.fn().mockResolvedValue([newCamera]),
@@ -467,7 +467,7 @@ describe('WorldService', () => {
 
     it('should refresh sound cache correctly', async () => {
       const newSound: RPSound = { ...testSound, id: 'sound_updated', name: 'Updated Sound' };
-      (mockContext.getApi as jest.Mock).mockImplementation((apiType) => {
+      (mockContext.getEngineApi as jest.Mock).mockImplementation((apiType) => {
         if (apiType.name === 'SoundApi') {
           return {
             getSounds: jest.fn().mockResolvedValue([newSound]),

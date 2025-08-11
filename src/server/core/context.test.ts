@@ -156,10 +156,10 @@ describe('RPServerContext', () => {
     });
   });
 
-  describe('getApi', () => {
+  describe('getEngineApi', () => {
     it('should create and cache API instances', () => {
-      const api1 = context.getApi(TestApi);
-      const api2 = context.getApi(TestApi);
+      const api1 = context.getEngineApi(TestApi);
+      const api2 = context.getEngineApi(TestApi);
 
       expect(api1).toBeInstanceOf(TestApi);
       expect(api2).toBe(api1); // Same instance (cached)
@@ -167,8 +167,8 @@ describe('RPServerContext', () => {
     });
 
     it('should create different instances for different API types', () => {
-      const testApi = context.getApi(TestApi);
-      const anotherApi = context.getApi(AnotherTestApi);
+      const testApi = context.getEngineApi(TestApi);
+      const anotherApi = context.getEngineApi(AnotherTestApi);
 
       expect(testApi).toBeInstanceOf(TestApi);
       expect(anotherApi).toBeInstanceOf(AnotherTestApi);
@@ -177,16 +177,16 @@ describe('RPServerContext', () => {
     });
 
     it('should pass engine client to API constructors', () => {
-      const api = context.getApi(TestApi);
+      const api = context.getEngineApi(TestApi);
 
       expect(api).toBeInstanceOf(TestApi);
       expect(api['_client']).toBe(mockEngineClient);
     });
 
     it('should support multiple API retrievals', () => {
-      const api1 = context.getApi(TestApi);
-      const api2 = context.getApi(AnotherTestApi);
-      const api3 = context.getApi(TestApi); // Should be cached
+      const api1 = context.getEngineApi(TestApi);
+      const api2 = context.getEngineApi(AnotherTestApi);
+      const api3 = context.getEngineApi(TestApi); // Should be cached
 
       expect(api1).toBeInstanceOf(TestApi);
       expect(api2).toBeInstanceOf(AnotherTestApi);
@@ -441,8 +441,8 @@ describe('RPServerContext', () => {
       const anotherService = context.getService(AnotherTestService) as AnotherTestService;
 
       // Get APIs
-      const testApi = context.getApi(TestApi);
-      const anotherApi = context.getApi(AnotherTestApi);
+      const testApi = context.getEngineApi(TestApi);
+      const anotherApi = context.getEngineApi(AnotherTestApi);
 
       // Verify everything works
       expect(testService.initCalled).toBe(true);

@@ -101,7 +101,7 @@ export class ConfigurationService extends RPServerService {
   }
 
   private async refreshConfigs(): Promise<void> {
-    this.configs = await this.getApi(ConfigurationApi).getConfiguration({
+    this.configs = await this.getEngineApi(ConfigurationApi).getConfiguration({
       localized: false,
       onlyPublic: false,
       withOptions: false,

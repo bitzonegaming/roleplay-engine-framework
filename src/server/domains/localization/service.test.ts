@@ -1,7 +1,13 @@
 /**
  * Tests for LocalizationService
  */
-import { Locale, Localization } from '@bitzonegaming/roleplay-engine-sdk';
+import {
+  DefaultNameTranslation,
+  ErrorTranslation,
+  Locale,
+  Localization,
+  TextTranslation,
+} from '@bitzonegaming/roleplay-engine-sdk';
 
 import { RPEventEmitter } from '../../../core/bus/event-emitter';
 import { RPHookBus } from '../../../core/bus/hook-bus';
@@ -123,11 +129,15 @@ describe('LocalizationService', () => {
     mockLocaleApi.getLocales.mockResolvedValue(enabledLocales);
     mockLocalizationApi.getLocalization.mockResolvedValue(testLocalization);
 
+    const mockConfigurationService = {
+      getConfig: jest.fn().mockReturnValue({ value: { key: 'en-US' } }),
+    };
+
     mockContext = {
       logger: mockLogger,
       eventEmitter: mockEventEmitter,
       hookBus: mockHookBus,
-      getApi: jest.fn().mockImplementation((apiType) => {
+      getEngineApi: jest.fn().mockImplementation((apiType) => {
         if (apiType.name === 'LocaleApi') {
           return mockLocaleApi;
         }
@@ -136,7 +146,12 @@ describe('LocalizationService', () => {
         }
         return {};
       }),
-      getService: jest.fn(),
+      getService: jest.fn().mockImplementation((serviceType) => {
+        if (serviceType.name === 'ConfigurationService') {
+          return mockConfigurationService;
+        }
+        return {};
+      }),
     } as unknown as RPServerContext;
 
     localizationService = new LocalizationService(mockContext);
@@ -152,7 +167,7 @@ describe('LocalizationService', () => {
       const enabledLocales = testLocales.filter((l) => l.enabled);
       expect(locales).toEqual(enabledLocales);
       expect(enLocalization).toEqual(testLocalization['en-US']);
-      expect(mockContext.getApi).toHaveBeenCalledTimes(2);
+      expect(mockContext.getEngineApi).toHaveBeenCalledTimes(2);
     });
 
     it('should log initialization steps', async () => {
@@ -244,10 +259,11 @@ describe('LocalizationService', () => {
       expect(result).toEqual(testLocalization['en-US']);
     });
 
-    it('should return undefined for non-existing locale', () => {
-      const result = localizationService.getLocalization('de-DE');
+    it('should fallback to default locale for non-existing locale', () => {
+      const result = localizationService.getLocalization('es-ES');
 
-      expect(result).toBeUndefined();
+      // Should fallback to en-US (default locale)
+      expect(result).toEqual(testLocalization['en-US']);
     });
 
     it('should handle different locales correctly', () => {
@@ -392,6 +408,258 @@ describe('LocalizationService', () => {
           localization: updatedLocalization,
         });
       });
+    });
+  });
+
+  describe('translateExpression', () => {
+    beforeEach(async () => {
+      await localizationService.init();
+    });
+
+    it('should translate expression with parameters', () => {
+      const result = localizationService.translateExpression(
+        'errors',
+        'notFound',
+        (error: ErrorTranslation) => error.message,
+        { resource: 'user' },
+        'en-US',
+      );
+
+      expect(result).toBe('Not found');
+    });
+
+    it('should translate expression from texts section', () => {
+      const testLocalizationWithParams: Localization = {
+        'en-US': {
+          texts: {
+            welcome: {
+              message: 'Welcome ${username}!',
+              description: 'Welcome message with username',
+            },
+          },
+        },
+      };
+
+      mockLocalizationApi.getLocalization.mockResolvedValue(testLocalizationWithParams);
+      localizationService['localization'] = testLocalizationWithParams;
+
+      const result = localizationService.translateExpression(
+        'texts',
+        'welcome',
+        (text: TextTranslation) => text.message,
+        { username: 'John' },
+        'en-US',
+      );
+
+      expect(result).toBe('Welcome John!');
+    });
+
+    it('should replace multiple parameters', () => {
+      const testLocalizationWithMultipleParams: Localization = {
+        'en-US': {
+          errors: {
+            userNotFound: {
+              message: 'User ${username} with ID ${id} was not found',
+              description: 'User not found error',
+              parameters: [],
+            },
+          },
+        },
+      };
+
+      mockLocalizationApi.getLocalization.mockResolvedValue(testLocalizationWithMultipleParams);
+      localizationService['localization'] = testLocalizationWithMultipleParams;
+
+      const result = localizationService.translateExpression(
+        'errors',
+        'userNotFound',
+        (error: ErrorTranslation) => error.message,
+        { username: 'john@example.com', id: '123' },
+        'en-US',
+      );
+
+      expect(result).toBe('User john@example.com with ID 123 was not found');
+    });
+
+    it('should handle repeated placeholders', () => {
+      const testLocalizationWithRepeatedParams: Localization = {
+        'en-US': {
+          texts: {
+            repeat: {
+              message: '${word} ${word} ${word}',
+              description: 'Repeated word message',
+            },
+          },
+        },
+      };
+
+      mockLocalizationApi.getLocalization.mockResolvedValue(testLocalizationWithRepeatedParams);
+      localizationService['localization'] = testLocalizationWithRepeatedParams;
+
+      const result = localizationService.translateExpression(
+        'texts',
+        'repeat',
+        (text: TextTranslation) => text.message,
+        { word: 'hello' },
+        'en-US',
+      );
+
+      expect(result).toBe('hello hello hello');
+    });
+
+    it('should fallback to default locale if locale not found', () => {
+      const result = localizationService.translateExpression(
+        'errors',
+        'notFound',
+        (error: ErrorTranslation) => error.message,
+        {},
+        'non-existent',
+      );
+
+      // Should fallback to en-US and return the translated message
+      expect(result).toBe('Not found');
+    });
+
+    it('should return key if section not found', () => {
+      const result = localizationService.translateExpression(
+        'blueprint' as const,
+        'notFound',
+        (item: { message: string }) => item.message,
+        {},
+        'en-US',
+      );
+
+      expect(result).toBe('notFound');
+    });
+
+    it('should return key if item not found', () => {
+      const result = localizationService.translateExpression(
+        'errors',
+        'nonExistentKey',
+        (error: ErrorTranslation) => error.message,
+        {},
+        'en-US',
+      );
+
+      expect(result).toBe('nonExistentKey');
+    });
+
+    it('should handle empty parameters', () => {
+      const result = localizationService.translateExpression(
+        'errors',
+        'notFound',
+        (error: ErrorTranslation) => error.message,
+        {},
+        'en-US',
+      );
+
+      expect(result).toBe('Not found');
+    });
+
+    it('should work with locale names section', () => {
+      const result = localizationService.translateExpression(
+        'locales',
+        'fr-FR',
+        (locale: DefaultNameTranslation) => locale.name,
+        {},
+        'en-US',
+      );
+
+      expect(result).toBe('French');
+    });
+  });
+
+  describe('translateError', () => {
+    beforeEach(async () => {
+      await localizationService.init();
+    });
+
+    it('should translate error message with parameters', () => {
+      const testErrorLocalization: Localization = {
+        'en-US': {
+          errors: {
+            SESSION_NOT_FOUND: {
+              message: 'Session ${sessionId} could not be found',
+              description: 'Session not found error',
+              parameters: [],
+            },
+          },
+        },
+      };
+
+      mockLocalizationApi.getLocalization.mockResolvedValue(testErrorLocalization);
+      localizationService['localization'] = testErrorLocalization;
+
+      const result = localizationService.translateError(
+        'SESSION_NOT_FOUND',
+        { sessionId: '12345' },
+        'en-US',
+      );
+
+      expect(result).toBe('Session 12345 could not be found');
+    });
+
+    it('should translate error with multiple parameters', () => {
+      const testErrorLocalization: Localization = {
+        'en-US': {
+          errors: {
+            INVALID_CREDENTIALS: {
+              message: 'Invalid credentials for user ${username} from IP ${ip}',
+              description: 'Invalid credentials error',
+              parameters: [],
+            },
+          },
+        },
+      };
+
+      mockLocalizationApi.getLocalization.mockResolvedValue(testErrorLocalization);
+      localizationService['localization'] = testErrorLocalization;
+
+      const result = localizationService.translateError(
+        'INVALID_CREDENTIALS',
+        { username: 'john@example.com', ip: '192.168.1.1' },
+        'en-US',
+      );
+
+      expect(result).toBe('Invalid credentials for user john@example.com from IP 192.168.1.1');
+    });
+
+    it('should use default locale when none specified', () => {
+      const result = localizationService.translateError('notFound', { resource: 'user' });
+
+      expect(result).toBe('Not found');
+    });
+
+    it('should return key when no localization available', () => {
+      const emptyLocalization: Localization = {};
+
+      mockLocalizationApi.getLocalization.mockResolvedValue(emptyLocalization);
+      localizationService['localization'] = emptyLocalization;
+
+      const result = localizationService.translateError(
+        'notFound',
+        { resource: 'utilisateur' },
+        'es-ES',
+      );
+
+      // Should return key when no localization is available
+      expect(result).toBe('notFound');
+    });
+
+    it('should return key when error not found', () => {
+      const result = localizationService.translateError(
+        'NON_EXISTENT_ERROR',
+        { param: 'value' },
+        'en-US',
+      );
+
+      expect(result).toBe('NON_EXISTENT_ERROR');
+    });
+
+    it('should handle empty parameter object', () => {
+      const result = localizationService.translateError('unauthorized', {}, 'en-US');
+
+      expect(result).toBe('Unauthorized');
     });
   });
 

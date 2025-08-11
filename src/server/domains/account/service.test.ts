@@ -41,7 +41,7 @@ describe('AccountService', () => {
       logger: mockLogger,
       eventEmitter: mockEventEmitter,
       hookBus: mockHookBus,
-      getApi: jest.fn().mockReturnValue({
+      getEngineApi: jest.fn().mockReturnValue({
         getAccountById: jest.fn().mockResolvedValue(testAccount),
         registerAccount: jest.fn().mockResolvedValue(testAccount),
         authWithPassword: jest.fn().mockResolvedValue({ access_token: 'token' }),
@@ -68,7 +68,7 @@ describe('AccountService', () => {
       const result = await accountService.getAccount(testAccountId);
 
       expect(result).toEqual(testAccount);
-      expect(mockContext.getApi).toHaveBeenCalled();
+      expect(mockContext.getEngineApi).toHaveBeenCalled();
     });
   });
 
@@ -84,7 +84,7 @@ describe('AccountService', () => {
       const result = await accountService.registerAccount(registerRequest);
 
       expect(result).toEqual(testAccount);
-      expect(mockContext.getApi).toHaveBeenCalled();
+      expect(mockContext.getEngineApi).toHaveBeenCalled();
     });
   });
 
@@ -98,13 +98,13 @@ describe('AccountService', () => {
       const result = await accountService.authWithPassword(authRequest);
 
       expect(result).toEqual({ access_token: 'token' });
-      expect(mockContext.getApi).toHaveBeenCalled();
+      expect(mockContext.getEngineApi).toHaveBeenCalled();
     });
   });
 
   describe('Discord authentication', () => {
     beforeEach(() => {
-      (mockContext.getApi as jest.Mock).mockReturnValue({
+      (mockContext.getEngineApi as jest.Mock).mockReturnValue({
         authImplicitFlow: jest.fn().mockResolvedValue({ access_token: 'discord_token' }),
         authOAuthFlow: jest.fn().mockResolvedValue({ access_token: 'oauth_token' }),
         getDiscordUserById: jest.fn().mockResolvedValue({ id: 'user123', username: 'discordUser' }),
@@ -117,7 +117,7 @@ describe('AccountService', () => {
       const result = await accountService.authDiscordImplicitFlow(request);
 
       expect(result).toEqual({ access_token: 'discord_token' });
-      expect(mockContext.getApi).toHaveBeenCalled();
+      expect(mockContext.getEngineApi).toHaveBeenCalled();
     });
 
     it('should handle Discord OAuth flow', async () => {
@@ -129,14 +129,14 @@ describe('AccountService', () => {
       const result = await accountService.authDiscordOAuthFlow(request);
 
       expect(result).toEqual({ access_token: 'oauth_token' });
-      expect(mockContext.getApi).toHaveBeenCalled();
+      expect(mockContext.getEngineApi).toHaveBeenCalled();
     });
 
     it('should get Discord user', async () => {
       const result = await accountService.getDiscordUser('user123');
 
       expect(result).toEqual({ id: 'user123', username: 'discordUser' });
-      expect(mockContext.getApi).toHaveBeenCalled();
+      expect(mockContext.getEngineApi).toHaveBeenCalled();
     });
   });
 

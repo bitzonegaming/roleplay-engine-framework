@@ -21,6 +21,9 @@ import { ConfigurationService } from './domains/configuration/service';
 import { LocalizationService } from './domains/localization/service';
 import { WorldService } from './domains/world/service';
 import { ReferenceService } from './domains/reference/service';
+import { ApiControllerCtor, ApiServer, ApiServerConfig } from './api';
+import { AccountController } from './domains/account/api.controller';
+import { HealthController } from './api/controllers/health.controller';
 
 /** Configuration options for creating a roleplay server instance */
 export interface RPServerOptions {
@@ -38,6 +41,8 @@ export interface RPServerOptions {
   timeout?: number;
   /** Custom logger instance (default: console logger) */
   logger?: RPLogger;
+  /** API server configuration */
+  api: ApiServerConfig;
 }
 
 /** Native integrations and customization options for the server */
@@ -104,6 +109,10 @@ export class RPServer {
   private readonly socket: EngineSocket;
   /** Handler for server-to-client events */
   private readonly s2cEventHandler: RPS2CEventHandler;
+  /** API server instance */
+  private readonly apiServer?: ApiServer;
+  /** Registered API controllers */
+  private readonly apiControllers: ApiControllerCtor[] = [];
   /** Flag to track if shutdown handlers are registered */
   private shutdownHandlersRegistered = false;
 
@@ -159,6 +168,9 @@ export class RPServer {
       .addService(SessionService)
       .addService(ReferenceService)
       .addService(AccountService);
+
+    this.apiServer = new ApiServer(this.context, options.api);
+    this.registerController(HealthController).registerController(AccountController);
   }
 
   /**
@@ -214,6 +226,28 @@ export class RPServer {
   }
 
   /**
+   * Registers an API controller with the server.
+   * Controllers must be registered before the server starts.
+   *
+   * @param controllerCtor - The controller class constructor
+   * @returns The server instance for method chaining
+   *
+   * @example
+   * ```typescript
+   * server
+   *   .registerController(HealthController)
+   *   .registerController(SessionController);
+   * ```
+   */
+  public registerController(controllerCtor: ApiControllerCtor): this {
+    if (!this.apiServer) {
+      throw new Error('API server is not configured. Set api options in RPServerOptions.');
+    }
+    this.apiControllers.push(controllerCtor);
+    return this;
+  }
+
+  /**
    * Starts the roleplay server.
    *
    * This method initializes the WebSocket connection to the roleplay engine
@@ -233,7 +267,50 @@ export class RPServer {
   public async start(): Promise<void> {
     await this.socket.start();
     await this.context.init();
+
+    if (this.apiServer) {
+      for (const controller of this.apiControllers) {
+        this.apiServer.registerController(controller);
+      }
+      await this.apiServer.start();
+    }
+
     this.registerShutdownHandlers();
+  }
+
+  /**
+   * Stops the roleplay server gracefully.
+   *
+   * This method performs a complete graceful shutdown by:
+   * 1. Stopping the API server if configured
+   * 2. Disposing all services in reverse order
+   * 3. Closing the WebSocket connection to the roleplay engine
+   * 4. Cleaning up all resources
+   *
+   * @returns Promise that resolves when the server is fully stopped
+   *
+   * @example
+   * ```typescript
+   * // Gracefully shutdown the server
+   * await server.stop();
+   * console.log('Server stopped gracefully');
+   * ```
+   */
+  public async stop(): Promise<void> {
+    try {
+      // Stop API server first
+      if (this.apiServer) {
+        await this.apiServer.stop();
+      }
+
+      // Dispose all services
+      await this.context.dispose();
+    } catch (error) {
+      this.context.logger.error('Error during service disposal:', error);
+    }
+
+    // Close WebSocket connection
+    this.socket.close(1000, 'Normal closure');
   }
 
   /**
@@ -261,32 +338,12 @@ export class RPServer {
   }
 
   /**
-   * Stops the roleplay server gracefully.
+   * Gets the API server instance if configured.
    *
-   * This method performs a complete graceful shutdown by:
-   * 1. Disposing all services in reverse order
-   * 2. Closing the WebSocket connection to the roleplay engine
-   * 3. Cleaning up all resources
-   *
-   * @returns Promise that resolves when the server is fully stopped
-   *
-   * @example
-   * ```typescript
-   * // Gracefully shutdown the server
-   * await server.stop();
-   * console.log('Server stopped gracefully');
-   * ```
+   * @returns The API server instance or undefined if not configured
    */
-  public async stop(): Promise<void> {
-    try {
-      // Dispose all services first
-      await this.context.dispose();
-    } catch (error) {
-      this.context.logger.error('Error during service disposal:', error);
-    }
-
-    // Close WebSocket connection
-    this.socket.close(1000, 'Normal closure');
+  public getApiServer(): ApiServer | undefined {
+    return this.apiServer;
   }
 
   /**

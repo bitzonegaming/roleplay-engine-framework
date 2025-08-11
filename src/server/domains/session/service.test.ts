@@ -1,8 +1,9 @@
 /**
  * Tests for SessionService
  */
-import { SessionEndReason } from '@bitzonegaming/roleplay-engine-sdk';
+import { AccessPolicy, SessionEndReason } from '@bitzonegaming/roleplay-engine-sdk';
 
+import { ConflictError, ForbiddenError, NotFoundError } from '../../core/errors';
 import { RPEventEmitter } from '../../../core/bus/event-emitter';
 import { RPHookBus } from '../../../core/bus/hook-bus';
 import { MockLogger } from '../../../../test/mocks';
@@ -11,7 +12,7 @@ import { RPServerEvents } from '../../core/events/events';
 import { RPServerHooks } from '../../core/hooks/hooks';
 
 import { SessionService } from './service';
-import { SessionId, RPSession } from './models/session';
+import { RPSession, SessionId, generateSessionTokenHash } from './models/session';
 
 describe('SessionService', () => {
   let mockLogger: MockLogger;
@@ -59,7 +60,7 @@ describe('SessionService', () => {
       logger: mockLogger,
       eventEmitter: mockEventEmitter,
       hookBus: mockHookBus,
-      getApi: jest.fn().mockReturnValue({
+      getEngineApi: jest.fn().mockReturnValue({
         startSession: jest.fn().mockResolvedValue({ token: 'session_token_123' }),
         authorizeSession: jest.fn().mockResolvedValue({}),
         linkCharacterToSession: jest.fn().mockResolvedValue({}),
@@ -93,8 +94,8 @@ describe('SessionService', () => {
       const sessionId = 'sess_123';
       const token = 'token_abc';
 
-      const hash1 = sessionService.generateTokenHash(sessionId, token);
-      const hash2 = sessionService.generateTokenHash(sessionId, token);
+      const hash1 = generateSessionTokenHash(sessionId, token);
+      const hash2 = generateSessionTokenHash(sessionId, token);
 
       expect(hash1).toBe(hash2);
       expect(typeof hash1).toBe('string');
@@ -102,8 +103,8 @@ describe('SessionService', () => {
     });
 
     it('should generate different hashes for different inputs', () => {
-      const hash1 = sessionService.generateTokenHash('sess_1', 'token_a');
-      const hash2 = sessionService.generateTokenHash('sess_2', 'token_b');
+      const hash1 = generateSessionTokenHash('sess_1', 'token_a');
+      const hash2 = generateSessionTokenHash('sess_2', 'token_b');
 
       expect(hash1).not.toBe(hash2);
     });
@@ -115,7 +116,7 @@ describe('SessionService', () => {
 
       await sessionService.authorizeSession(testSessionId, request);
 
-      expect(mockContext.getApi).toHaveBeenCalled();
+      expect(mockContext.getEngineApi).toHaveBeenCalled();
     });
   });
 
@@ -125,7 +126,148 @@ describe('SessionService', () => {
 
       await sessionService.linkCharacterToSession(testSessionId, request);
 
-      expect(mockContext.getApi).toHaveBeenCalled();
+      expect(mockContext.getEngineApi).toHaveBeenCalled();
+    });
+  });
+
+  describe('validateAccessPolicy', () => {
+    it('should not throw when session has the required access policy', () => {
+      const mockReferenceService = {
+        hasAccessPolicyInSegmentDefinitions: jest.fn().mockReturnValue(true),
+      };
+      (mockContext.getService as jest.Mock).mockReturnValue(mockReferenceService);
+      sessionService['sessions'].set(testSessionId, testSessionWithAccount);
+
+      expect(() => {
+        sessionService.validateAccessPolicy(testSessionId, AccessPolicy.AccountRead);
+      }).not.toThrow();
+
+      expect(mockReferenceService.hasAccessPolicyInSegmentDefinitions).toHaveBeenCalledWith(
+        AccessPolicy.AccountRead,
+        testSessionWithAccount.account?.segmentDefinitionIds,
+      );
+    });
+
+    it('should throw ForbiddenError when session lacks the required access policy', () => {
+      const mockReferenceService = {
+        hasAccessPolicyInSegmentDefinitions: jest.fn().mockReturnValue(false),
+      };
+      (mockContext.getService as jest.Mock).mockReturnValue(mockReferenceService);
+      sessionService['sessions'].set(testSessionId, testSessionWithAccount);
+
+      expect(() => {
+        sessionService.validateAccessPolicy(testSessionId, AccessPolicy.AccountWrite);
+      }).toThrow(ForbiddenError);
+    });
+
+    it('should throw NotFoundError when session does not exist', () => {
+      expect(() => {
+        sessionService.validateAccessPolicy('non_existent_session', AccessPolicy.AccountRead);
+      }).toThrow(NotFoundError);
+    });
+
+    it('should throw ConflictError when session has no account', () => {
+      sessionService['sessions'].set(testSessionId, testSession);
+
+      expect(() => {
+        sessionService.validateAccessPolicy(testSessionId, AccessPolicy.AccountRead);
+      }).toThrow(ConflictError);
+    });
+  });
+
+  describe('hasAccessPolicy', () => {
+    let mockReferenceService: {
+      hasAccessPolicyInSegmentDefinitions: jest.MockedFunction<
+        (accessPolicy: AccessPolicy, segmentDefinitionIds: ReadonlyArray<string>) => boolean
+      >;
+    };
+
+    beforeEach(() => {
+      mockReferenceService = {
+        hasAccessPolicyInSegmentDefinitions: jest.fn(),
+      };
+      (mockContext.getService as jest.Mock).mockReturnValue(mockReferenceService);
+    });
+
+    it('should return true when account has the access policy', () => {
+      mockReferenceService.hasAccessPolicyInSegmentDefinitions.mockReturnValue(true);
+      sessionService['sessions'].set(testSessionId, testSessionWithAccount);
+
+      const result = sessionService.hasAccessPolicy(testSessionId, AccessPolicy.AccountRead);
+
+      expect(result).toBe(true);
+      expect(mockReferenceService.hasAccessPolicyInSegmentDefinitions).toHaveBeenCalledWith(
+        AccessPolicy.AccountRead,
+        testSessionWithAccount.account?.segmentDefinitionIds,
+      );
+    });
+
+    it('should return true when character has the access policy', () => {
+      mockReferenceService.hasAccessPolicyInSegmentDefinitions
+        .mockReturnValueOnce(false) // account check fails
+        .mockReturnValueOnce(true); // character check succeeds
+      sessionService['sessions'].set(testSessionId, testSessionWithCharacter);
+
+      const result = sessionService.hasAccessPolicy(testSessionId, AccessPolicy.CharacterRead);
+
+      expect(result).toBe(true);
+      expect(mockReferenceService.hasAccessPolicyInSegmentDefinitions).toHaveBeenCalledTimes(2);
+      expect(mockReferenceService.hasAccessPolicyInSegmentDefinitions).toHaveBeenNthCalledWith(
+        1,
+        AccessPolicy.CharacterRead,
+        testSessionWithCharacter.account?.segmentDefinitionIds,
+      );
+      expect(mockReferenceService.hasAccessPolicyInSegmentDefinitions).toHaveBeenNthCalledWith(
+        2,
+        AccessPolicy.CharacterRead,
+        testSessionWithCharacter.character?.segmentDefinitionIds,
+      );
+    });
+
+    it('should return false when neither account nor character has the access policy', () => {
+      mockReferenceService.hasAccessPolicyInSegmentDefinitions.mockReturnValue(false);
+      sessionService['sessions'].set(testSessionId, testSessionWithCharacter);
+
+      const result = sessionService.hasAccessPolicy(testSessionId, AccessPolicy.AccountWrite);
+
+      expect(result).toBe(false);
+      expect(mockReferenceService.hasAccessPolicyInSegmentDefinitions).toHaveBeenCalledTimes(2);
+    });
+
+    it('should return false when account lacks policy and no character is linked', () => {
+      mockReferenceService.hasAccessPolicyInSegmentDefinitions.mockReturnValue(false);
+      sessionService['sessions'].set(testSessionId, testSessionWithAccount);
+
+      const result = sessionService.hasAccessPolicy(testSessionId, AccessPolicy.AccountWrite);
+
+      expect(result).toBe(false);
+      expect(mockReferenceService.hasAccessPolicyInSegmentDefinitions).toHaveBeenCalledTimes(1);
+    });
+
+    it('should throw NotFoundError when session does not exist', () => {
+      expect(() => {
+        sessionService.hasAccessPolicy('non_existent_session', AccessPolicy.AccountRead);
+      }).toThrow(NotFoundError);
+    });
+
+    it('should throw ConflictError when session has no account', () => {
+      sessionService['sessions'].set(testSessionId, testSession);
+
+      expect(() => {
+        sessionService.hasAccessPolicy(testSessionId, AccessPolicy.AccountRead);
+      }).toThrow(ConflictError);
+    });
+
+    it('should prioritize account access policy over character access policy', () => {
+      mockReferenceService.hasAccessPolicyInSegmentDefinitions
+        .mockReturnValueOnce(true) // account check succeeds
+        .mockReturnValueOnce(false); // character check would fail, but shouldn't be called
+      sessionService['sessions'].set(testSessionId, testSessionWithCharacter);
+
+      const result = sessionService.hasAccessPolicy(testSessionId, AccessPolicy.AccountRead);
+
+      expect(result).toBe(true);
+      expect(mockReferenceService.hasAccessPolicyInSegmentDefinitions).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -151,7 +293,7 @@ describe('SessionService', () => {
 
       it('should emit sessionFinished event on session start failure', async () => {
         const emitSpy = jest.spyOn(mockEventEmitter, 'emit');
-        (mockContext.getApi as jest.Mock).mockReturnValue({
+        (mockContext.getEngineApi as jest.Mock).mockReturnValue({
           startSession: jest.fn().mockRejectedValue(new Error('API Error')),
         });
 
@@ -175,7 +317,7 @@ describe('SessionService', () => {
         const mockSessionApi = {
           finishSession: jest.fn().mockResolvedValue({}),
         };
-        (mockContext.getApi as jest.Mock).mockReturnValue(mockSessionApi);
+        (mockContext.getEngineApi as jest.Mock).mockReturnValue(mockSessionApi);
 
         mockEventEmitter.emit('playerDisconnected', {
           sessionId: testSessionId,
@@ -284,7 +426,7 @@ describe('SessionService', () => {
       });
 
       it('should do nothing if session has no account after refresh', async () => {
-        (mockContext.getApi as jest.Mock).mockReturnValue({
+        (mockContext.getEngineApi as jest.Mock).mockReturnValue({
           getActiveSessionInfo: jest.fn().mockResolvedValue({ ...testSession, account: null }),
         });
         const emitSpy = jest.spyOn(mockEventEmitter, 'emit');
@@ -312,7 +454,7 @@ describe('SessionService', () => {
       });
 
       it('should refresh session and emit sessionCharacterLinked event', async () => {
-        (mockContext.getApi as jest.Mock).mockReturnValue({
+        (mockContext.getEngineApi as jest.Mock).mockReturnValue({
           getActiveSessionInfo: jest.fn().mockResolvedValue(testSessionWithCharacter),
         });
         const emitSpy = jest.spyOn(mockEventEmitter, 'emit');

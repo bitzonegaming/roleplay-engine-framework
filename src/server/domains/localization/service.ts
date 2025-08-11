@@ -1,4 +1,6 @@
 import {
+  ConfigKey,
+  ErrorTranslation,
   Locale,
   LocaleApi,
   Localization,
@@ -11,6 +13,7 @@ import { SocketLocaleAdded } from '../../socket/events/socket-locale-added';
 import { SocketLocaleEnabled } from '../../socket/events/socket-locale-enabled';
 import { SocketLocaleDisabled } from '../../socket/events/socket-locale-disabled';
 import { SocketLocalizationUpdated } from '../../socket/events/socket-localization-updated';
+import { ConfigurationService } from '../configuration/service';
 
 type LocalizationSection = Localization[string];
 
@@ -49,6 +52,7 @@ type LocalizationSection = Localization[string];
  * ```
  */
 export class LocalizationService extends RPServerService {
+  private static defaultSystemLocale = 'en-US';
   /** Array of all available locales */
   private locales: Locale[] = [];
   /** Map of localization data indexed by locale code */
@@ -89,8 +93,29 @@ export class LocalizationService extends RPServerService {
    * }
    * ```
    */
-  public getLocalization(locale: string) {
-    return this.localization[locale];
+  public getLocalization(locale?: string) {
+    const defaultLanguage =
+      this.getService(ConfigurationService).getConfig(ConfigKey.DefaultLanguage)?.value.key ??
+      LocalizationService.defaultSystemLocale;
+    const sLocale = locale ?? defaultLanguage;
+
+    let localization = this.localization[sLocale];
+    if (localization) {
+      return localization;
+    }
+
+    if (sLocale !== defaultLanguage) {
+      localization = this.localization[defaultLanguage];
+      if (localization) {
+        return localization;
+      }
+    }
+
+    if (sLocale !== LocalizationService.defaultSystemLocale) {
+      return this.localization[LocalizationService.defaultSystemLocale];
+    }
+
+    return;
   }
 
   /**
@@ -167,12 +192,133 @@ export class LocalizationService extends RPServerService {
     return this.locales.find((l) => l.code === locale);
   }
 
+  /**
+   * Translates an expression from a localization section with type safety.
+   *
+   * This method provides a generic, type-safe way to access and translate
+   * text from any section of the localization data. It uses a selector function
+   * to specify which property to extract and translate from the section item.
+   *
+   * @template T - The type of the section items
+   * @param sectionKey - The name of the section in the localization data
+   * @param key - The key of the specific item within the section
+   * @param selector - Function to select which property to translate from the item
+   * @param params - Parameters to replace in the expression
+   * @param locale - Optional locale code (defaults to system locale)
+   * @returns The translated and parameterized text, or the key if not found
+   *
+   * @example
+   * ```typescript
+   * // Translate an error message
+   * const errorMsg = localizationService.translateExpression(
+   *   'errors',
+   *   'SESSION_NOT_FOUND',
+   *   (error) => error.message,
+   *   { sessionId: '12345' }
+   * );
+   *
+   * // Translate a text message
+   * const textMsg = localizationService.translateExpression(
+   *   'texts',
+   *   'welcome_message',
+   *   (text) => text.message,
+   *   { username: 'John' }
+   * );
+   *
+   * // Translate a locale name
+   * const localeName = localizationService.translateExpression(
+   *   'locales',
+   *   'en-US',
+   *   (locale) => locale.name,
+   *   {}
+   * );
+   * ```
+   */
+  public translateExpression<T>(
+    sectionKey: keyof LocalizationSection,
+    key: string,
+    selector: (item: T) => string,
+    params: Record<string, string>,
+    locale?: string,
+  ): string {
+    const localization = this.getLocalization(locale);
+    if (!localization) {
+      return key;
+    }
+
+    const section = localization[sectionKey] as Record<string, T> | undefined;
+    if (!section) {
+      return key;
+    }
+
+    const item = section[key];
+    if (!item) {
+      return key;
+    }
+
+    const expression = selector(item);
+    return this.buildExpression(expression, params);
+  }
+
+  /**
+   * Translates an error message with parameter replacement.
+   *
+   * This is a convenience method that specifically targets the 'errors' section
+   * of the localization data. It automatically selects the message property
+   * from ErrorTranslation objects and performs parameter substitution.
+   *
+   * @param key - The error key to look up in the errors section
+   * @param params - Parameters to replace in the error message (e.g., ${sessionId})
+   * @param locale - Optional locale code (defaults to system locale)
+   * @returns The translated and parameterized error message, or the key if not found
+   *
+   * @example
+   * ```typescript
+   * // Translate a session not found error
+   * const errorMsg = localizationService.translateError(
+   *   'SESSION_NOT_FOUND',
+   *   { sessionId: '12345' }
+   * );
+   * // Result: "Session 12345 could not be found"
+   *
+   * // Translate with specific locale
+   * const frenchError = localizationService.translateError(
+   *   'INVALID_CREDENTIALS',
+   *   { username: 'john@example.com' },
+   *   'fr-FR'
+   * );
+   * // Result: "Les identifiants pour john@example.com sont invalides"
+   * ```
+   */
+  public translateError(key: string, params: Record<string, string>, locale?: string): string {
+    return this.translateExpression(
+      'errors',
+      key,
+      (error: ErrorTranslation) => error.message,
+      params,
+      locale,
+    );
+  }
+
+  private buildExpression(expression: string, params: Record<string, string>): string {
+    let result = expression;
+
+    for (const [key, value] of Object.entries(params)) {
+      const placeholder = `\${${key}}`;
+      while (result.includes(placeholder)) {
+        result = result.replace(placeholder, value);
+      }
+    }
+
+    return result;
+  }
+
   private async refreshLocales() {
-    this.locales = await this.getApi(LocaleApi).getLocales({ enabled: true, noCache: true });
+    this.locales = await this.getEngineApi(LocaleApi).getLocales({ enabled: true, noCache: true });
   }
 
   private async refreshLocalization() {
-    this.localization = await this.getApi(LocalizationApi).getLocalization({
+    this.localization = await this.getEngineApi(LocalizationApi).getLocalization({
       noCache: true,
     });
   }

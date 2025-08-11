@@ -142,14 +142,14 @@ export class RPServerContext {
    *
    * @example
    * ```typescript
-   * const accountApi = context.getApi(AccountApi);
-   * const sessionApi = context.getApi(SessionApi);
+   * const accountApi = context.getEngineApi(AccountApi);
+   * const sessionApi = context.getEngineApi(SessionApi);
    *
    * // Subsequent calls return the same instances
-   * const sameAccountApi = context.getApi(AccountApi); // Same instance as above
+   * const sameAccountApi = context.getEngineApi(AccountApi); // Same instance as above
    * ```
    */
-  public getApi<Api>(ApiConstructor: new (client: EngineClient) => Api): Api {
+  public getEngineApi<Api>(ApiConstructor: new (client: EngineClient) => Api): Api {
     let api = this.apis.get(ApiConstructor);
     if (!api) {
       api = new ApiConstructor(this.engineClient);
@@ -211,7 +211,7 @@ export class RPServerContext {
    * ```
    */
   public getService<Service extends RPServerService>(
-    serviceConstructor: RPServerServiceCtor,
+    serviceConstructor: new (context: RPServerContext) => Service,
   ): Service {
     const service = this.services.get(serviceConstructor) as Service;
     if (!service) {

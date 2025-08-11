@@ -1,7 +1,7 @@
 {
-  "name": "@bitzonegaming/gamemode-sdk",
+  "name": "@bitzonegaming/roleplay-engine-framework",
   "version": "0.1.2",
-  "description": "Roleplay Engine Gamemode SDK",
+  "description": "Roleplay Engine Framework",
   "main": "index.js",
   "types": "index.d.ts",
   "homepage": "https://bitzone.com",
@@ -19,9 +19,9 @@
     "gen:barrels": "node scripts/generate-barrels.js",
     "lint": "eslint 'src/**/*.{ts,tsx}' --fix",
     "format": "prettier --write 'src/**/*.{ts,tsx,js,json,md}'",
-    "gen:sdk": "npx openapi-generator-cli generate --generator-key sdk",
     "build": "tsc -p tsconfig.build.json",
-    "test": "jest"
+    "test": "jest",
+    "test:coverage": "jest --coverage"
   },
   "author": "bitzone",
   "license": "ISC",
@@ -31,7 +31,11 @@
   },
   "dependencies": {
     "@bitzonegaming/roleplay-engine-sdk": "^0.1.15",
+    "@fastify/cors": "^11.1.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.2",
     "emittery": "^1.2.0",
+    "fastify": "^5.4.0",
     "json-logic-js": "^2.0.5",
     "reflect-metadata": "^0.2.2",
     "uuid": "^11.1.0",
@@ -81,6 +85,7 @@
     "ts-jest": "^29.4.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.36.0"
+    "typescript-eslint": "^8.36.0",
+    "typescript-json-schema": "^0.65.1"
   }
 }

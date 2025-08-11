@@ -1,0 +1,206 @@
+import 'reflect-metadata';
+import Fastify, { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import cors from '@fastify/cors';
+
+import { RPServerContext } from '../core/context';
+import { RPLogger } from '../../core/logger';
+
+import {
+  ApiController,
+  ApiControllerCtor,
+  ApiServerConfig,
+  AuthorizedRequest,
+  ControllerMetadata,
+  METADATA_KEYS,
+  RouteMetadata,
+} from './types';
+import { createErrorHandler } from './middleware/error-handler';
+import { validateApiKey, validateSessionToken } from './middleware/auth';
+import { getAuthorizationMetadata, getParamMetadata, ParamType } from './decorators';
+
+/**
+ * API Server that manages HTTP endpoints using Fastify and decorators
+ */
+export class ApiServer {
+  private readonly fastify: FastifyInstance;
+  private readonly controllers: Map<ApiControllerCtor, ApiController> = new Map();
+  private readonly context: RPServerContext;
+  private readonly config: ApiServerConfig;
+  private readonly logger: RPLogger;
+
+  constructor(context: RPServerContext, config: ApiServerConfig) {
+    this.context = context;
+    this.config = config;
+    this.logger = context.logger;
+
+    this.fastify = Fastify({
+      logger: false, // We use our own logger
+    });
+
+    this.fastify.setErrorHandler(createErrorHandler(context));
+
+    if (config.cors) {
+      this.fastify.register(cors, config.cors);
+    }
+  }
+
+  /**
+   * Registers a controller with the API server
+   */
+  public registerController(ControllerCtor: ApiControllerCtor): this {
+    const controllerMetadata: ControllerMetadata | undefined = Reflect.getMetadata(
+      METADATA_KEYS.CONTROLLER,
+      ControllerCtor,
+    );
+
+    if (!controllerMetadata) {
+      throw new Error(`${ControllerCtor.name} is not decorated with @Controller`);
+    }
+
+    const controller = new ControllerCtor(this.context);
+    this.controllers.set(ControllerCtor, controller);
+
+    const routes: RouteMetadata[] =
+      Reflect.getMetadata(METADATA_KEYS.ROUTES, Object.getPrototypeOf(controller)) || [];
+    for (const route of routes) {
+      const fullPath = this.joinPaths(controllerMetadata.path, route.path);
+      const methodName = Reflect.getMetadata(
+        `route:${route.method}:${route.path}`,
+        Object.getPrototypeOf(controller),
+      ) as string;
+
+      if (!methodName) {
+        this.logger.warn(`No method found for route ${route.method} ${fullPath}`);
+        continue;
+      }
+
+      const handler = (controller as unknown as Record<string, unknown>)[methodName] as (
+        ...args: unknown[]
+      ) => unknown;
+      if (typeof handler !== 'function') {
+        this.logger.warn(`Method ${methodName} is not a function on controller`);
+        continue;
+      }
+
+      const authMetadata = getAuthorizationMetadata(Object.getPrototypeOf(controller), methodName);
+      this.fastify.route({
+        method: route.method,
+        url: fullPath,
+        handler: async (request: FastifyRequest, reply: FastifyReply) => {
+          const authorizedRequest = request as AuthorizedRequest;
+
+          if (authMetadata?.apiKey) {
+            await validateApiKey(request, this.config.gamemodeApiKeyHash);
+          }
+
+          if (authMetadata?.sessionToken) {
+            await validateSessionToken(
+              authorizedRequest,
+              this.context,
+              authMetadata.sessionToken.scope,
+              authMetadata.sessionToken.accessPolicy,
+            );
+          }
+
+          const paramMetadata = getParamMetadata(Object.getPrototypeOf(controller), methodName);
+          const args: unknown[] = [];
+
+          for (const param of paramMetadata.sort((a, b) => a.index - b.index)) {
+            switch (param.type) {
+              case ParamType.BODY:
+                args[param.index] = request.body;
+                break;
+              case ParamType.QUERY:
+                args[param.index] = param.property
+                  ? (request.query as Record<string, unknown>)[param.property]
+                  : request.query;
+                break;
+              case ParamType.PARAMS:
+                args[param.index] = param.property
+                  ? (request.params as Record<string, unknown>)[param.property]
+                  : request.params;
+                break;
+              case ParamType.HEADERS:
+                args[param.index] = param.property
+                  ? request.headers[param.property.toLowerCase()]
+                  : request.headers;
+                break;
+              case ParamType.REQUEST:
+                args[param.index] = authorizedRequest;
+                break;
+              case ParamType.REPLY:
+                args[param.index] = reply;
+                break;
+            }
+          }
+
+          // Call the handler
+          const result = await handler.call(controller, ...args);
+
+          // Set status code if specified
+          if (route.statusCode) {
+            reply.status(route.statusCode);
+          }
+
+          // Return the result
+          return result;
+        },
+      });
+
+      this.logger.info(`Registered route: ${route.method} ${fullPath}`);
+    }
+
+    return this;
+  }
+
+  /**
+   * Starts the API server
+   */
+  public async start(): Promise<void> {
+    const port = this.config.port ?? 3000;
+    const host = this.config.host || '0.0.0.0';
+
+    await this.fastify.listen({ port, host });
+    this.logger.info(`API server listening on ${host}:${port}`);
+  }
+
+  /**
+   * Stops the API server
+   */
+  public async stop(): Promise<void> {
+    // Dispose all controllers
+    for (const controller of this.controllers.values()) {
+      if (controller.dispose) {
+        try {
+          await controller.dispose();
+        } catch (error) {
+          this.logger.error(`Error disposing controller:`, error);
+        }
+      }
+    }
+
+    // Close the server
+    await this.fastify.close();
+    this.logger.info('API server stopped');
+  }
+
+  /**
+   * Gets the Fastify instance (for advanced configuration)
+   */
+  public getFastify(): FastifyInstance {
+    return this.fastify;
+  }
+
+  /**
+   * Joins paths ensuring proper slashes
+   */
+  private joinPaths(base: string, path: string): string {
+    if (!base) return path || '/';
+    if (!path || path === '/') return base || '/';
+
+    const cleanBase = base.endsWith('/') ? base.slice(0, -1) : base;
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+
+    return `${cleanBase}${cleanPath}`;
+  }
+}

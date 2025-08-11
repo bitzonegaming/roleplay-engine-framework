@@ -10,6 +10,7 @@ import {
   ReferenceCategory,
   Segment,
   SegmentTypeCode,
+  SessionEndReason,
 } from '@bitzonegaming/roleplay-engine-sdk';
 
 import { RPEventEmitter } from '../../../core/bus/event-emitter';
@@ -177,7 +178,7 @@ describe('ReferenceService', () => {
       logger: mockLogger,
       eventEmitter: mockEventEmitter,
       hookBus: mockHookBus,
-      getApi: jest.fn().mockImplementation((apiType) => {
+      getEngineApi: jest.fn().mockImplementation((apiType) => {
         if (apiType.name === 'ReferenceApi') {
           return mockReferenceApi;
         }
@@ -199,7 +200,7 @@ describe('ReferenceService', () => {
     it('should initialize vehicle references and metrics', async () => {
       await referenceService.init();
 
-      expect(mockContext.getApi).toHaveBeenCalledTimes(4);
+      expect(mockContext.getEngineApi).toHaveBeenCalledTimes(4);
       expect(mockReferenceApi.getReferences).toHaveBeenCalledWith({
         category: ReferenceCategory.Vehicle,
         enabled: true,
@@ -617,7 +618,7 @@ describe('ReferenceService', () => {
     beforeEach(async () => {
       await referenceService.init();
       testSegmentDefinitions.forEach((def) => {
-        referenceService['segmentDefinitions'].set(def.id, def);
+        referenceService['segmentDefinitions'].set(def.id, def as unknown as RPSegmentDefinition);
       });
       referenceService['referenceSegmentDefinitionIds'].set(
         'ACCOUNT:user123',
@@ -805,6 +806,370 @@ describe('ReferenceService', () => {
       });
 
       expect(result).toBe(true);
+    });
+  });
+
+  describe('getReferenceAccessPolicies', () => {
+    const testSegmentDefinitions = [
+      {
+        id: 'def_1',
+        type: SegmentTypeCode.Manual,
+        category: ReferenceCategory.Account,
+        policy: {
+          accessPolicies: [AccessPolicy.AccountWrite, AccessPolicy.AccountRead],
+        },
+        style: { color: { background: '#FFD700', text: '#000000' } },
+        visible: true,
+        createdDate: Date.now() - 86400000,
+        lastModifiedDate: Date.now() - 3600000,
+      },
+      {
+        id: 'def_2',
+        type: SegmentTypeCode.Auto,
+        category: ReferenceCategory.Account,
+        policy: {
+          accessPolicies: [AccessPolicy.AccountRead, AccessPolicy.CharacterRead],
+        },
+        style: { color: { background: '#00FF00', text: '#FFFFFF' } },
+        visible: true,
+        createdDate: Date.now() - 86400000,
+        lastModifiedDate: Date.now() - 3600000,
+      },
+    ];
+
+    beforeEach(async () => {
+      await referenceService.init();
+      testSegmentDefinitions.forEach((def) => {
+        referenceService['segmentDefinitions'].set(def.id, def as unknown as RPSegmentDefinition);
+      });
+      referenceService['referenceSegmentDefinitionIds'].set(
+        'ACCOUNT:user123',
+        new Set(['def_1', 'def_2']),
+      );
+    });
+
+    it('should return unique access policies for a reference', () => {
+      const result = referenceService.getReferenceAccessPolicies('ACCOUNT:user123');
+
+      expect(result).toHaveLength(3);
+      expect(result).toContain(AccessPolicy.AccountWrite);
+      expect(result).toContain(AccessPolicy.AccountRead);
+      expect(result).toContain(AccessPolicy.CharacterRead);
+    });
+
+    it('should return empty array for reference with no segments', () => {
+      const result = referenceService.getReferenceAccessPolicies('ACCOUNT:non_existing');
+      expect(result).toEqual([]);
+    });
+
+    it('should handle object parameter format', () => {
+      const result = referenceService.getReferenceAccessPolicies({
+        category: ReferenceCategory.Account,
+        referenceId: 'user123',
+      });
+
+      expect(result).toHaveLength(3);
+      expect(result).toContain(AccessPolicy.AccountWrite);
+    });
+
+    it('should deduplicate access policies', () => {
+      // Add another segment with overlapping policies
+      const def3 = {
+        id: 'def_3',
+        type: SegmentTypeCode.Manual,
+        category: ReferenceCategory.Account,
+        policy: {
+          accessPolicies: [AccessPolicy.AccountRead, AccessPolicy.ReferenceRead],
+        },
+        style: { color: { background: '#0000FF', text: '#FFFFFF' } },
+        visible: true,
+        createdDate: Date.now() - 86400000,
+        lastModifiedDate: Date.now() - 3600000,
+      };
+
+      referenceService['segmentDefinitions'].set(def3.id, def3);
+      referenceService['referenceSegmentDefinitionIds'].set(
+        'ACCOUNT:user123',
+        new Set(['def_1', 'def_2', 'def_3']),
+      );
+
+      const result = referenceService.getReferenceAccessPolicies('ACCOUNT:user123');
+
+      expect(result).toHaveLength(4); // AccountRead should not be duplicated
+      expect(result).toContain(AccessPolicy.ReferenceRead);
+    });
+  });
+
+  describe('hasAccessPolicyInSegmentDefinitions', () => {
+    const testSegmentDefinitions = [
+      {
+        id: 'def_1',
+        type: SegmentTypeCode.Manual,
+        category: ReferenceCategory.Account,
+        policy: {
+          accessPolicies: [AccessPolicy.AccountWrite, AccessPolicy.AccountRead],
+        },
+        style: { color: { background: '#FFD700', text: '#000000' } },
+        visible: true,
+        createdDate: Date.now(),
+        lastModifiedDate: Date.now(),
+      },
+      {
+        id: 'def_2',
+        type: SegmentTypeCode.Auto,
+        category: ReferenceCategory.Account,
+        policy: {
+          accessPolicies: [AccessPolicy.CharacterRead],
+        },
+        style: { color: { background: '#00FF00', text: '#FFFFFF' } },
+        visible: true,
+        createdDate: Date.now(),
+        lastModifiedDate: Date.now(),
+      },
+    ];
+
+    beforeEach(async () => {
+      await referenceService.init();
+      testSegmentDefinitions.forEach((def) => {
+        referenceService['segmentDefinitions'].set(def.id, def as unknown as RPSegmentDefinition);
+      });
+    });
+
+    it('should return true when access policy exists in segment definitions', () => {
+      const result = referenceService.hasAccessPolicyInSegmentDefinitions(
+        AccessPolicy.AccountWrite,
+        ['def_1', 'def_2'],
+      );
+      expect(result).toBe(true);
+    });
+
+    it('should return false when access policy does not exist in segment definitions', () => {
+      const result = referenceService.hasAccessPolicyInSegmentDefinitions(
+        AccessPolicy.ReferenceRead,
+        ['def_1', 'def_2'],
+      );
+      expect(result).toBe(false);
+    });
+
+    it('should return false when segment definitions do not exist', () => {
+      const result = referenceService.hasAccessPolicyInSegmentDefinitions(
+        AccessPolicy.AccountRead,
+        ['non_existing_def'],
+      );
+      expect(result).toBe(false);
+    });
+
+    it('should handle empty segment definition IDs array', () => {
+      const result = referenceService.hasAccessPolicyInSegmentDefinitions(
+        AccessPolicy.AccountRead,
+        [],
+      );
+      expect(result).toBe(false);
+    });
+
+    it('should return true on first match without checking all definitions', () => {
+      const result = referenceService.hasAccessPolicyInSegmentDefinitions(
+        AccessPolicy.AccountRead,
+        ['def_1', 'def_2'],
+      );
+      expect(result).toBe(true);
+    });
+  });
+
+  describe('hasAccessPolicy', () => {
+    const testSegmentDefinitions = [
+      {
+        id: 'def_1',
+        policy: { accessPolicies: [AccessPolicy.AccountWrite, AccessPolicy.AccountRead] },
+      },
+      {
+        id: 'def_2',
+        policy: { accessPolicies: [AccessPolicy.CharacterRead] },
+      },
+    ];
+
+    beforeEach(async () => {
+      await referenceService.init();
+      testSegmentDefinitions.forEach((def) => {
+        referenceService['segmentDefinitions'].set(def.id, def as unknown as RPSegmentDefinition);
+      });
+      referenceService['referenceSegmentDefinitionIds'].set(
+        'ACCOUNT:user123',
+        new Set(['def_1', 'def_2']),
+      );
+    });
+
+    it('should return true when reference has the access policy', () => {
+      const result = referenceService.hasAccessPolicy('ACCOUNT:user123', AccessPolicy.AccountWrite);
+      expect(result).toBe(true);
+    });
+
+    it('should return false when reference does not have the access policy', () => {
+      const result = referenceService.hasAccessPolicy(
+        'ACCOUNT:user123',
+        AccessPolicy.ReferenceRead,
+      );
+      expect(result).toBe(false);
+    });
+
+    it('should return false for non-existing reference', () => {
+      const result = referenceService.hasAccessPolicy(
+        'ACCOUNT:non_existing',
+        AccessPolicy.AccountRead,
+      );
+      expect(result).toBe(false);
+    });
+
+    it('should handle object parameter format', () => {
+      const result = referenceService.hasAccessPolicy(
+        {
+          category: ReferenceCategory.Account,
+          referenceId: 'user123',
+        },
+        AccessPolicy.CharacterRead,
+      );
+      expect(result).toBe(true);
+    });
+  });
+
+  describe('session event handlers', () => {
+    beforeEach(async () => {
+      await referenceService.init();
+    });
+
+    describe('onSessionAuthorized', () => {
+      it('should load account reference data on session authorization', async () => {
+        const mockLoadReference = jest.spyOn(
+          referenceService as unknown as { loadReference: jest.Mock },
+          'loadReference',
+        );
+        mockLoadReference.mockResolvedValue(undefined);
+
+        const payload = {
+          sessionId: 'session_123',
+          account: {
+            id: 'account_456',
+            username: 'testuser',
+            segmentDefinitionIds: ['def_1'],
+            authorizedDate: Date.now(),
+          },
+        };
+
+        mockEventEmitter.emit('sessionAuthorized', payload);
+
+        await new Promise((resolve) => setTimeout(resolve, 10));
+
+        expect(mockLoadReference).toHaveBeenCalledWith({
+          category: ReferenceCategory.Account,
+          referenceId: 'account_456',
+        });
+      });
+    });
+
+    describe('onSessionCharacterLinked', () => {
+      it('should load character reference data on character linking', async () => {
+        const mockLoadReference = jest.spyOn(
+          referenceService as unknown as { loadReference: jest.Mock },
+          'loadReference',
+        );
+        mockLoadReference.mockResolvedValue(undefined);
+
+        const payload = {
+          sessionId: 'session_123',
+          account: {
+            id: 'account_456',
+            username: 'testuser',
+            segmentDefinitionIds: ['def_1'],
+            authorizedDate: Date.now(),
+          },
+          character: {
+            id: 'character_789',
+            firstName: 'John',
+            lastName: 'Doe',
+            fullName: 'John Doe',
+            linkedDate: Date.now(),
+            segmentDefinitionIds: ['def_2'],
+          },
+        };
+
+        mockEventEmitter.emit('sessionCharacterLinked', payload);
+
+        await new Promise((resolve) => setTimeout(resolve, 10));
+
+        expect(mockLoadReference).toHaveBeenCalledWith({
+          category: ReferenceCategory.Character,
+          referenceId: 'character_789',
+        });
+      });
+    });
+
+    describe('onSessionFinished', () => {
+      it('should remove account and character references on session finish', () => {
+        const mockRemoveReference = jest.spyOn(
+          referenceService as unknown as { removeReference: jest.Mock },
+          'removeReference',
+        );
+
+        const payload = {
+          sessionId: 'session_123',
+          accountId: 'account_456',
+          characterId: 'character_789',
+          endReason: SessionEndReason.PlayerQuit,
+        };
+
+        mockEventEmitter.emit('sessionFinished', payload);
+
+        expect(mockRemoveReference).toHaveBeenCalledWith(
+          { category: ReferenceCategory.Account, referenceId: 'account_456' },
+          'session_123',
+        );
+        expect(mockRemoveReference).toHaveBeenCalledWith(
+          { category: ReferenceCategory.Character, referenceId: 'character_789' },
+          'session_123',
+        );
+      });
+
+      it('should handle session finish with only account', () => {
+        const mockRemoveReference = jest.spyOn(
+          referenceService as unknown as { removeReference: jest.Mock },
+          'removeReference',
+        );
+
+        const payload = {
+          sessionId: 'session_123',
+          accountId: 'account_456',
+          endReason: SessionEndReason.PlayerQuit,
+        };
+
+        mockEventEmitter.emit('sessionFinished', payload);
+
+        expect(mockRemoveReference).toHaveBeenCalledTimes(1);
+        expect(mockRemoveReference).toHaveBeenCalledWith(
+          { category: ReferenceCategory.Account, referenceId: 'account_456' },
+          'session_123',
+        );
+      });
+
+      it('should handle session finish with only character', () => {
+        const mockRemoveReference = jest.spyOn(
+          referenceService as unknown as { removeReference: jest.Mock },
+          'removeReference',
+        );
+
+        const payload = {
+          sessionId: 'session_123',
+          characterId: 'character_789',
+          endReason: SessionEndReason.PlayerQuit,
+        };
+
+        mockEventEmitter.emit('sessionFinished', payload);
+
+        expect(mockRemoveReference).toHaveBeenCalledTimes(1);
+        expect(mockRemoveReference).toHaveBeenCalledWith(
+          { category: ReferenceCategory.Character, referenceId: 'character_789' },
+          'session_123',
+        );
+      });
     });
   });
 
