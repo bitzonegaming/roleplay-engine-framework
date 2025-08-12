@@ -56,8 +56,8 @@ export type RPServerServiceCtor<C extends RPServerContext = RPServerContext> = n
  *
  * @example With custom context
  * ```typescript
- * export class PlayerService extends RPServerService<GTA5ServerContext> {
- *   // this.context is now typed as GTA5ServerContext
+ * export class PlayerService extends RPServerService<GameServerContext> {
+ *   // this.context is now typed as GameServerContext
  *   public getPlayer(playerId: string) {
  *     return this.context.players.get(playerId);
  *   }
@@ -181,7 +181,7 @@ export abstract class RPServerService<C extends RPServerContext = RPServerContex
    * ```
    */
   protected getService<Service extends RPServerService>(
-    ServiceConstructor: new (context: RPServerContext) => Service,
+    ServiceConstructor: new (context: C) => Service,
   ): Service {
     return this.context.getService(ServiceConstructor);
   }

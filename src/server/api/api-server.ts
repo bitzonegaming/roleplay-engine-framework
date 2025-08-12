@@ -21,14 +21,14 @@ import { getAuthorizationMetadata, getParamMetadata, ParamType } from './decorat
 /**
  * API Server that manages HTTP endpoints using Fastify and decorators
  */
-export class ApiServer {
+export class ApiServer<C extends RPServerContext = RPServerContext> {
   private readonly fastify: FastifyInstance;
-  private readonly controllers: Map<ApiControllerCtor, ApiController> = new Map();
-  private readonly context: RPServerContext;
+  private readonly controllers: Map<ApiControllerCtor<C>, ApiController<C>> = new Map();
+  private readonly context: C;
   private readonly config: ApiServerConfig;
   private readonly logger: RPLogger;
 
-  constructor(context: RPServerContext, config: ApiServerConfig) {
+  constructor(context: C, config: ApiServerConfig) {
     this.context = context;
     this.config = config;
     this.logger = context.logger;
@@ -47,7 +47,7 @@ export class ApiServer {
   /**
    * Registers a controller with the API server
    */
-  public registerController(ControllerCtor: ApiControllerCtor): this {
+  public registerController(ControllerCtor: ApiControllerCtor<C>): this {
     const controllerMetadata: ControllerMetadata | undefined = Reflect.getMetadata(
       METADATA_KEYS.CONTROLLER,
       ControllerCtor,
@@ -134,15 +134,12 @@ export class ApiServer {
             }
           }
 
-          // Call the handler
           const result = await handler.call(controller, ...args);
 
-          // Set status code if specified
           if (route.statusCode) {
             reply.status(route.statusCode);
           }
 
-          // Return the result
           return result;
         },
       });
@@ -168,7 +165,6 @@ export class ApiServer {
    * Stops the API server
    */
   public async stop(): Promise<void> {
-    // Dispose all controllers
     for (const controller of this.controllers.values()) {
       if (controller.dispose) {
         try {
@@ -179,7 +175,6 @@ export class ApiServer {
       }
     }
 
-    // Close the server
     await this.fastify.close();
     this.logger.info('API server stopped');
   }

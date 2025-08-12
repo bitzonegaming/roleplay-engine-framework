@@ -7,7 +7,7 @@ import { RPEventEmitter } from '../../core/bus/event-emitter';
 import { RPHookBus } from '../../core/bus/hook-bus';
 import { MockEngineClient, MockLogger } from '../../../test/mocks';
 
-import { RPServerContext, RPServerContextOptions } from './context';
+import { CustomServerContextOptions, RPServerContext, RPServerContextOptions } from './context';
 import { RPServerService } from './server-service';
 import { RPServerEvents } from './events/events';
 import { RPServerHooks } from './hooks/hooks';
@@ -85,6 +85,73 @@ class CustomServerContext extends RPServerContext {
   }
 }
 
+// Advanced custom context with typed options
+interface GameServerContextOptions extends Record<string, unknown> {
+  gameConfig: {
+    maxPlayers: number;
+    mapName: string;
+  };
+  features: {
+    pvpEnabled: boolean;
+    economySystem: boolean;
+  };
+}
+
+class GameServerContext extends RPServerContext<GameServerContextOptions> {
+  public readonly gameConfig: GameServerContextOptions['gameConfig'];
+  public readonly features: GameServerContextOptions['features'];
+
+  constructor(options: RPServerContextOptions & GameServerContextOptions) {
+    super(options);
+    this.gameConfig = options.gameConfig;
+    this.features = options.features;
+  }
+
+  public getMaxPlayers(): number {
+    return this.gameConfig.maxPlayers;
+  }
+
+  public isPvpEnabled(): boolean {
+    return this.features.pvpEnabled;
+  }
+
+  public getMapInfo(): string {
+    return `Map: ${this.gameConfig.mapName}, Max Players: ${this.gameConfig.maxPlayers}`;
+  }
+}
+
+// Racing game context example
+interface RacingContextOptions extends Record<string, unknown> {
+  trackConfig: {
+    name: string;
+    laps: number;
+    weatherCondition: 'sunny' | 'rainy' | 'foggy';
+  };
+  vehicleSettings: {
+    damageEnabled: boolean;
+    maxSpeed: number;
+  };
+}
+
+class RacingServerContext extends RPServerContext<RacingContextOptions> {
+  public readonly trackConfig: RacingContextOptions['trackConfig'];
+  public readonly vehicleSettings: RacingContextOptions['vehicleSettings'];
+
+  constructor(options: RPServerContextOptions & RacingContextOptions) {
+    super(options);
+    this.trackConfig = options.trackConfig;
+    this.vehicleSettings = options.vehicleSettings;
+  }
+
+  public getRaceInfo(): string {
+    return `Track: ${this.trackConfig.name}, Laps: ${this.trackConfig.laps}, Weather: ${this.trackConfig.weatherCondition}`;
+  }
+
+  public getVehicleSettings(): RacingContextOptions['vehicleSettings'] {
+    return this.vehicleSettings;
+  }
+}
+
 describe('RPServerContext', () => {
   let mockLogger: MockLogger;
   let mockEngineClient: MockEngineClient;
@@ -106,7 +173,9 @@ describe('RPServerContext', () => {
       hookBus: mockHookBus,
     };
 
-    context = new RPServerContext(contextOptions);
+    context = new RPServerContext(
+      contextOptions as RPServerContextOptions & CustomServerContextOptions,
+    );
   });
 
   describe('constructor', () => {
@@ -126,7 +195,10 @@ describe('RPServerContext', () => {
 
   describe('static create factory method', () => {
     it('should create context with default constructor', () => {
-      const createdContext = RPServerContext.create(RPServerContext, contextOptions);
+      const createdContext = RPServerContext.create(
+        RPServerContext,
+        contextOptions as RPServerContextOptions & CustomServerContextOptions,
+      );
 
       expect(createdContext).toBeInstanceOf(RPServerContext);
       expect(createdContext.logger).toBe(mockLogger);
@@ -134,7 +206,10 @@ describe('RPServerContext', () => {
     });
 
     it('should create context with custom constructor', () => {
-      const customContext = RPServerContext.create(CustomServerContext, contextOptions);
+      const customContext = RPServerContext.create(
+        CustomServerContext,
+        contextOptions as RPServerContextOptions & CustomServerContextOptions,
+      );
 
       expect(customContext).toBeInstanceOf(CustomServerContext);
       expect(customContext).toBeInstanceOf(RPServerContext);
@@ -149,7 +224,10 @@ describe('RPServerContext', () => {
         }
       }
 
-      const extendedContext = RPServerContext.create(ExtendedContext, contextOptions);
+      const extendedContext = RPServerContext.create(
+        ExtendedContext,
+        contextOptions as RPServerContextOptions & CustomServerContextOptions,
+      );
 
       expect(extendedContext).toBeInstanceOf(ExtendedContext);
       expect((extendedContext as ExtendedContext).specialMethod()).toBe('special');
@@ -366,7 +444,9 @@ describe('RPServerContext', () => {
         }
       }
 
-      const localContext = new RPServerContext(contextOptions);
+      const localContext = new RPServerContext(
+        contextOptions as RPServerContextOptions & CustomServerContextOptions,
+      );
       localContext.addService(FirstService);
       localContext.addService(SecondService);
       await localContext.init();
@@ -388,7 +468,9 @@ describe('RPServerContext', () => {
     });
 
     it('should handle disposal errors gracefully and log them', async () => {
-      const localContext = new RPServerContext(contextOptions);
+      const localContext = new RPServerContext(
+        contextOptions as RPServerContextOptions & CustomServerContextOptions,
+      );
       localContext.addService(ThrowingDisposeService);
       localContext.addService(TestService);
       await localContext.init();
@@ -410,7 +492,9 @@ describe('RPServerContext', () => {
     });
 
     it('should do nothing if context is not initialized', async () => {
-      const uninitializedContext = new RPServerContext(contextOptions);
+      const uninitializedContext = new RPServerContext(
+        contextOptions as RPServerContextOptions & CustomServerContextOptions,
+      );
       uninitializedContext.addService(TestService);
 
       await uninitializedContext.dispose();
@@ -420,7 +504,9 @@ describe('RPServerContext', () => {
     });
 
     it('should handle empty services list', async () => {
-      const emptyContext = new RPServerContext(contextOptions);
+      const emptyContext = new RPServerContext(
+        contextOptions as RPServerContextOptions & CustomServerContextOptions,
+      );
       await emptyContext.init();
 
       await expect(emptyContext.dispose()).resolves.not.toThrow();
@@ -508,6 +594,246 @@ describe('RPServerContext', () => {
       // Working service should still be available
       const testService = context.getService(TestService) as TestService;
       expect(testService.initCalled).toBe(true);
+    });
+  });
+
+  describe('custom context options support', () => {
+    describe('GameServerContext with typed options', () => {
+      it('should create context with custom options', () => {
+        const gameOptions: RPServerContextOptions & GameServerContextOptions = {
+          ...contextOptions,
+          gameConfig: {
+            maxPlayers: 32,
+            mapName: 'CityCenter',
+          },
+          features: {
+            pvpEnabled: true,
+            economySystem: false,
+          },
+        };
+
+        const gameContext = new GameServerContext(gameOptions);
+
+        expect(gameContext).toBeInstanceOf(GameServerContext);
+        expect(gameContext).toBeInstanceOf(RPServerContext);
+        expect(gameContext.gameConfig.maxPlayers).toBe(32);
+        expect(gameContext.gameConfig.mapName).toBe('CityCenter');
+        expect(gameContext.features.pvpEnabled).toBe(true);
+        expect(gameContext.features.economySystem).toBe(false);
+      });
+
+      it('should provide typed access to custom options', () => {
+        const gameOptions: RPServerContextOptions & GameServerContextOptions = {
+          ...contextOptions,
+          gameConfig: {
+            maxPlayers: 16,
+            mapName: 'Desert',
+          },
+          features: {
+            pvpEnabled: false,
+            economySystem: true,
+          },
+        };
+
+        const gameContext = new GameServerContext(gameOptions);
+
+        expect(gameContext.getMaxPlayers()).toBe(16);
+        expect(gameContext.isPvpEnabled()).toBe(false);
+        expect(gameContext.getMapInfo()).toBe('Map: Desert, Max Players: 16');
+      });
+
+      it('should work with static create factory method', () => {
+        const gameOptions: RPServerContextOptions & GameServerContextOptions = {
+          ...contextOptions,
+          gameConfig: {
+            maxPlayers: 64,
+            mapName: 'Metropolis',
+          },
+          features: {
+            pvpEnabled: true,
+            economySystem: true,
+          },
+        };
+
+        const gameContext = RPServerContext.create(GameServerContext, gameOptions);
+
+        expect(gameContext).toBeInstanceOf(GameServerContext);
+        expect((gameContext as GameServerContext).getMaxPlayers()).toBe(64);
+        expect((gameContext as GameServerContext).isPvpEnabled()).toBe(true);
+        expect((gameContext as GameServerContext).getMapInfo()).toBe(
+          'Map: Metropolis, Max Players: 64',
+        );
+      });
+    });
+
+    describe('RacingServerContext with complex options', () => {
+      it('should create racing context with track and vehicle settings', () => {
+        const racingOptions: RPServerContextOptions & RacingContextOptions = {
+          ...contextOptions,
+          trackConfig: {
+            name: 'Monaco Circuit',
+            laps: 10,
+            weatherCondition: 'rainy',
+          },
+          vehicleSettings: {
+            damageEnabled: true,
+            maxSpeed: 250,
+          },
+        };
+
+        const racingContext = new RacingServerContext(racingOptions);
+
+        expect(racingContext.trackConfig.name).toBe('Monaco Circuit');
+        expect(racingContext.trackConfig.laps).toBe(10);
+        expect(racingContext.trackConfig.weatherCondition).toBe('rainy');
+        expect(racingContext.vehicleSettings.damageEnabled).toBe(true);
+        expect(racingContext.vehicleSettings.maxSpeed).toBe(250);
+      });
+
+      it('should provide custom methods for racing context', () => {
+        const racingOptions: RPServerContextOptions & RacingContextOptions = {
+          ...contextOptions,
+          trackConfig: {
+            name: 'Silverstone',
+            laps: 15,
+            weatherCondition: 'sunny',
+          },
+          vehicleSettings: {
+            damageEnabled: false,
+            maxSpeed: 300,
+          },
+        };
+
+        const racingContext = new RacingServerContext(racingOptions);
+
+        expect(racingContext.getRaceInfo()).toBe('Track: Silverstone, Laps: 15, Weather: sunny');
+        expect(racingContext.getVehicleSettings()).toEqual({
+          damageEnabled: false,
+          maxSpeed: 300,
+        });
+      });
+    });
+
+    describe('services with custom contexts', () => {
+      it('should allow services to use custom context types', () => {
+        class GameManagementService extends RPServerService<GameServerContext> {
+          public getServerCapacity(): string {
+            return `Server can handle ${this.context.getMaxPlayers()} players on ${this.context.gameConfig.mapName}`;
+          }
+
+          public canEnablePvp(): boolean {
+            return this.context.isPvpEnabled();
+          }
+        }
+
+        const gameOptions: RPServerContextOptions & GameServerContextOptions = {
+          ...contextOptions,
+          gameConfig: {
+            maxPlayers: 50,
+            mapName: 'Islands',
+          },
+          features: {
+            pvpEnabled: true,
+            economySystem: true,
+          },
+        };
+
+        const gameContext = new GameServerContext(gameOptions);
+        gameContext.addService(GameManagementService);
+
+        const gameService = gameContext.getService(GameManagementService);
+
+        expect(gameService.getServerCapacity()).toBe('Server can handle 50 players on Islands');
+        expect(gameService.canEnablePvp()).toBe(true);
+      });
+
+      it('should support racing services with racing context', () => {
+        class RaceManagementService extends RPServerService<RacingServerContext> {
+          public getRaceDetails(): string {
+            return this.context.getRaceInfo();
+          }
+
+          public isVehicleDamageEnabled(): boolean {
+            return this.context.getVehicleSettings().damageEnabled;
+          }
+
+          public getMaxSpeed(): number {
+            return this.context.getVehicleSettings().maxSpeed;
+          }
+        }
+
+        const racingOptions: RPServerContextOptions & RacingContextOptions = {
+          ...contextOptions,
+          trackConfig: {
+            name: 'Nürburgring',
+            laps: 3,
+            weatherCondition: 'foggy',
+          },
+          vehicleSettings: {
+            damageEnabled: true,
+            maxSpeed: 280,
+          },
+        };
+
+        const racingContext = new RacingServerContext(racingOptions);
+        racingContext.addService(RaceManagementService);
+
+        const raceService = racingContext.getService(RaceManagementService);
+
+        expect(raceService.getRaceDetails()).toBe('Track: Nürburgring, Laps: 3, Weather: foggy');
+        expect(raceService.isVehicleDamageEnabled()).toBe(true);
+        expect(raceService.getMaxSpeed()).toBe(280);
+      });
+    });
+
+    describe('integration with server creation', () => {
+      it('should demonstrate full integration flow', async () => {
+        // This test shows how the custom context would be used in practice
+        class IntegratedGameService extends RPServerService<GameServerContext> {
+          public async init(): Promise<void> {
+            await super.init();
+            this.logger.info(`Initializing game server for ${this.context.gameConfig.mapName}`);
+          }
+
+          public getGameStatus(): object {
+            return {
+              map: this.context.gameConfig.mapName,
+              maxPlayers: this.context.getMaxPlayers(),
+              pvpEnabled: this.context.isPvpEnabled(),
+              economyEnabled: this.context.features.economySystem,
+            };
+          }
+        }
+
+        const gameOptions: RPServerContextOptions & GameServerContextOptions = {
+          ...contextOptions,
+          gameConfig: {
+            maxPlayers: 40,
+            mapName: 'TestWorld',
+          },
+          features: {
+            pvpEnabled: false,
+            economySystem: true,
+          },
+        };
+
+        const gameContext = new GameServerContext(gameOptions);
+        gameContext.addService(IntegratedGameService);
+
+        await gameContext.init();
+
+        const gameService = gameContext.getService(IntegratedGameService);
+        const status = gameService.getGameStatus();
+
+        expect(status).toEqual({
+          map: 'TestWorld',
+          maxPlayers: 40,
+          pvpEnabled: false,
+          economyEnabled: true,
+        });
+
+        await gameContext.dispose();
+      });
     });
   });
 });

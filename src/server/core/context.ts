@@ -6,7 +6,7 @@ import { RPLogger } from '../../core/logger';
 
 import { RPServerEvents } from './events/events';
 import { RPServerHooks } from './hooks/hooks';
-import { RPServerService, RPServerServiceCtor } from './server-service';
+import { RPServerService } from './server-service';
 
 /** Custom options that can be passed to server context extensions */
 export type CustomServerContextOptions = Record<string, unknown>;
@@ -24,7 +24,10 @@ export interface RPServerContextOptions {
 }
 
 /** Constructor type for server context implementations */
-export type RPServerContextCtor = new (options: RPServerContextOptions) => RPServerContext;
+export type RPServerContextCtor<
+  TOptions extends CustomServerContextOptions = CustomServerContextOptions,
+  TContext extends RPServerContext<TOptions> = RPServerContext<TOptions>,
+> = new (options: RPServerContextOptions & TOptions) => TContext;
 
 /**
  * Server context that provides dependency injection and service management for the roleplay server.
@@ -38,6 +41,8 @@ export type RPServerContextCtor = new (options: RPServerContextOptions) => RPSer
  * The context follows a singleton pattern for APIs and services, ensuring that each
  * service type and API type is instantiated only once and reused throughout the
  * application lifecycle.
+ *
+ * @template TOptions - Custom options type for extending the context
  *
  * @example
  * ```typescript
@@ -60,12 +65,31 @@ export type RPServerContextCtor = new (options: RPServerContextOptions) => RPSer
  * const accountService = context.getService(AccountService);
  * const account = await accountService.getAccount('acc_123');
  * ```
+ *
+ * @example With custom options
+ * ```typescript
+ * interface GameServerOptions {
+ *   gameServerConfig: { gameMode: string };
+ * }
+ *
+ * class GameServerContext extends RPServerContext<GameServerOptions> {
+ *   constructor(options: RPServerContextOptions & GameServerOptions) {
+ *     super(options);
+ *     this.setupGameFeatures(options.gameServerConfig);
+ *   }
+ * }
+ * ```
  */
-export class RPServerContext {
+export class RPServerContext<
+  TOptions extends CustomServerContextOptions = CustomServerContextOptions,
+> {
   /** Cache of API instances to ensure singleton behavior */
   private readonly apis = new Map<new (c: EngineClient) => unknown, unknown>();
   /** Map of registered services */
-  private readonly services = new Map<RPServerServiceCtor, RPServerService>();
+  private readonly services = new Map<
+    new (context: RPServerContext<TOptions>) => RPServerService,
+    RPServerService
+  >();
   /** Flag indicating whether the context has been initialized */
   private initialized = false;
 
@@ -82,9 +106,11 @@ export class RPServerContext {
   /**
    * Creates a new server context with the provided infrastructure.
    *
-   * @param options - The configuration options including client, emitter, hooks, and logger
+   * @param options - The configuration options including client, emitter, hooks, and logger plus custom options
    */
-  constructor(options: RPServerContextOptions) {
+  constructor(options: RPServerContextOptions);
+  constructor(options: RPServerContextOptions & TOptions);
+  constructor(options: RPServerContextOptions & TOptions) {
     this.logger = options.logger;
     this.engineClient = options.engineClient;
     this.eventEmitter = options.eventEmitter;
@@ -122,10 +148,10 @@ export class RPServerContext {
    * });
    * ```
    */
-  public static create(
-    ctor: RPServerContextCtor,
-    options: RPServerContextOptions,
-  ): RPServerContext {
+  public static create<TOptions extends CustomServerContextOptions = CustomServerContextOptions>(
+    ctor: RPServerContextCtor<TOptions>,
+    options: RPServerContextOptions & TOptions,
+  ): RPServerContext<TOptions> {
     return new ctor(options);
   }
 
@@ -179,13 +205,18 @@ export class RPServerContext {
    * await context.init(); // Initializes all registered services
    * ```
    */
-  public addService(serviceConstructor: RPServerServiceCtor) {
+  public addService<Service extends RPServerService>(
+    serviceConstructor: new (context: this) => Service,
+  ) {
     if (this.initialized) {
       throw new Error('Cannot add service after server start.');
     }
 
     const service = new serviceConstructor(this);
-    this.services.set(serviceConstructor, service);
+    this.services.set(
+      serviceConstructor as unknown as new (context: RPServerContext<TOptions>) => RPServerService,
+      service,
+    );
     return this;
   }
 
@@ -211,13 +242,15 @@ export class RPServerContext {
    * ```
    */
   public getService<Service extends RPServerService>(
-    serviceConstructor: new (context: RPServerContext) => Service,
+    serviceConstructor: new (context: this) => Service,
   ): Service {
-    const service = this.services.get(serviceConstructor) as Service;
+    const service = this.services.get(
+      serviceConstructor as unknown as new (context: RPServerContext<TOptions>) => RPServerService,
+    );
     if (!service) {
       throw new Error(`Service ${serviceConstructor.name} not registered in the context.`);
     }
-    return service;
+    return service as Service;
   }
 
   /**

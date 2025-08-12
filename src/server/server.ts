@@ -152,7 +152,7 @@ export class RPServer {
     );
 
     const contextType = natives.customContext?.type ?? RPServerContext;
-    const contextOptions: RPServerContextOptions = {
+    const contextOptions: RPServerContextOptions & CustomServerContextOptions = {
       engineClient,
       eventEmitter,
       hookBus,

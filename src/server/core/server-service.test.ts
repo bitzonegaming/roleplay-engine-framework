@@ -397,41 +397,41 @@ describe('RPServerService', () => {
       expect(defaultService.getContext()).toBe(mockContext);
     });
 
-    it('should demonstrate GTA5 server context example', () => {
-      // Example: GTA5 server context
-      interface GTA5ServerContext extends RPServerContext {
-        gta5World: {
+    it('should demonstrate game server context example', () => {
+      // Example: Game server context
+      interface GameServerContext extends RPServerContext {
+        gameWorld: {
           getPlayer: (id: string) => { name: string; vehicle?: string };
           getVehicle: (id: string) => { model: string; position: [number, number, number] };
         };
       }
 
-      // Example: Player management service for GTA5
-      class PlayerService extends RPServerService<GTA5ServerContext> {
+      // Example: Player management service for game server
+      class PlayerService extends RPServerService<GameServerContext> {
         public getPlayerVehicle(playerId: string): string | undefined {
-          const player = this.context.gta5World.getPlayer(playerId);
+          const player = this.context.gameWorld.getPlayer(playerId);
           return player.vehicle;
         }
       }
 
-      // Mock GTA5 context
-      const gta5Context = {
+      // Mock game server context
+      const gameContext = {
         ...mockContext,
-        gta5World: {
+        gameWorld: {
           getPlayer: (id: string) => ({
             name: `Player${id}`,
-            vehicle: id === '123' ? 'infernus' : undefined,
+            vehicle: id === '123' ? 'sportscar' : undefined,
           }),
           getVehicle: (_id: string) => ({
-            model: 'infernus',
+            model: 'sportscar',
             position: [0, 0, 0] as [number, number, number],
           }),
         },
-      } as GTA5ServerContext;
+      } as GameServerContext;
 
-      const playerService = new PlayerService(gta5Context);
+      const playerService = new PlayerService(gameContext);
 
-      expect(playerService.getPlayerVehicle('123')).toBe('infernus');
+      expect(playerService.getPlayerVehicle('123')).toBe('sportscar');
       expect(playerService.getPlayerVehicle('456')).toBeUndefined();
     });
   });
