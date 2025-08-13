@@ -5,22 +5,22 @@ const path = require('path');
 
 function findTSFiles(dir, excludePatterns = []) {
   const files = [];
-  
+
   function walkDir(currentPath) {
     const items = fs.readdirSync(currentPath, { withFileTypes: true });
-    
+
     for (const item of items) {
       const fullPath = path.join(currentPath, item.name);
-      
+
       if (item.isDirectory()) {
         walkDir(fullPath);
       } else if (item.isFile() && item.name.endsWith('.ts')) {
         // Check if file should be excluded
-        const shouldExclude = excludePatterns.some(pattern => {
+        const shouldExclude = excludePatterns.some((pattern) => {
           const regex = new RegExp(pattern);
           return regex.test(item.name) || regex.test(fullPath);
         });
-        
+
         if (!shouldExclude) {
           // Check if file has content (not empty)
           const content = fs.readFileSync(fullPath, 'utf8').trim();
@@ -31,33 +31,28 @@ function findTSFiles(dir, excludePatterns = []) {
       }
     }
   }
-  
+
   walkDir(dir);
   return files;
 }
 
 function generateBarrel(directory, outputFile, extraExports = []) {
-  const excludePatterns = [
-    '.*\\.test\\.ts$',
-    '.*\\.spec\\.ts$',
-    'e2e\\.test\\.ts$',
-    'index\\.ts$'
-  ];
-  
+  const excludePatterns = ['.*\\.test\\.ts$', '.*\\.spec\\.ts$', 'e2e\\.test\\.ts$', 'index\\.ts$'];
+
   const tsFiles = findTSFiles(directory, excludePatterns);
   const exports = [];
-  
+
   // Add extra exports first
-  extraExports.forEach(exportPath => {
+  extraExports.forEach((exportPath) => {
     exports.push(`export * from '${exportPath}';`);
   });
-  
-  tsFiles.forEach(file => {
+
+  tsFiles.forEach((file) => {
     const relativePath = path.relative(directory, file);
     const importPath = './' + relativePath.replace(/\.ts$/, '').replace(/\\/g, '/');
     exports.push(`export * from '${importPath}';`);
   });
-  
+
   const content = [
     '/**',
     ' * @file Automatically generated barrel exports',
@@ -65,9 +60,9 @@ function generateBarrel(directory, outputFile, extraExports = []) {
     ' */',
     '',
     ...exports,
-    ''
+    '',
   ].join('\n');
-  
+
   fs.writeFileSync(outputFile, content);
   console.log(`Generated ${outputFile} with ${exports.length} exports`);
 }
@@ -77,9 +72,9 @@ const serverDir = path.join(__dirname, '../src/server');
 const serverIndex = path.join(serverDir, 'index.ts');
 const coreExports = [
   '../core/bus/event-emitter',
-  '../core/bus/hook-bus', 
+  '../core/bus/hook-bus',
   '../core/logger',
-  '../version'
+  '../version',
 ];
 generateBarrel(serverDir, serverIndex, coreExports);
 

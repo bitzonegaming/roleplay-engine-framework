@@ -302,18 +302,15 @@ export class RPServer {
    */
   public async stop(): Promise<void> {
     try {
-      // Stop API server first
       if (this.apiServer) {
         await this.apiServer.stop();
       }
 
-      // Dispose all services
       await this.context.dispose();
     } catch (error) {
       this.context.logger.error('Error during service disposal:', error);
     }
 
-    // Close WebSocket connection
     this.socket.close(1000, 'Normal closure');
   }
 
