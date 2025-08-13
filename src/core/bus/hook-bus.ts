@@ -29,9 +29,9 @@ export class RPHookBus<HM extends object> {
   }>();
   private wrappers = new Map<string, Map<unknown, (payload: unknown) => Promise<unknown>>>();
 
-  on<K extends Extract<keyof HM, string>, H extends HM[K] & ((arg: unknown) => unknown)>(
+  on<K extends Extract<keyof HM, string>>(
     name: K,
-    fn: H,
+    fn: HM[K],
     filter?: HM[K] extends (arg: infer P) => unknown
       ? FilterObject<P> | ((p: P) => boolean)
       : never,

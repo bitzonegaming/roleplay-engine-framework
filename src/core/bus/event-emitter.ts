@@ -53,7 +53,6 @@ export class RPEventEmitter<Events> {
       return this;
     }
 
-    // Find the wrapped listener by checking the original property
     const listeners = this.emitter.listeners(event as string);
     const wrappedListener = listeners.find(
       (l) => (l as { __original?: EventListener<Events[E]> }).__original === listener,

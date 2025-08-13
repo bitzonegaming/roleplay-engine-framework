@@ -7,7 +7,8 @@ import { RPEventEmitter } from '../../core/bus/event-emitter';
 import { RPHookBus } from '../../core/bus/hook-bus';
 import { MockEngineClient, MockLogger } from '../../../test/mocks';
 
-import { CustomServerContextOptions, RPServerContext, RPServerContextOptions } from './context';
+import { RPServerContext, RPServerContextOptions } from './context';
+import { CustomServerContextOptions } from './types';
 import { RPServerService } from './server-service';
 import { RPServerEvents } from './events/events';
 import { RPServerHooks } from './hooks/hooks';
@@ -658,9 +659,9 @@ describe('RPServerContext', () => {
         const gameContext = RPServerContext.create(GameServerContext, gameOptions);
 
         expect(gameContext).toBeInstanceOf(GameServerContext);
-        expect((gameContext as GameServerContext).getMaxPlayers()).toBe(64);
-        expect((gameContext as GameServerContext).isPvpEnabled()).toBe(true);
-        expect((gameContext as GameServerContext).getMapInfo()).toBe(
+        expect((gameContext as unknown as GameServerContext).getMaxPlayers()).toBe(64);
+        expect((gameContext as unknown as GameServerContext).isPvpEnabled()).toBe(true);
+        expect((gameContext as unknown as GameServerContext).getMapInfo()).toBe(
           'Map: Metropolis, Max Players: 64',
         );
       });
@@ -716,13 +717,26 @@ describe('RPServerContext', () => {
 
     describe('services with custom contexts', () => {
       it('should allow services to use custom context types', () => {
-        class GameManagementService extends RPServerService<GameServerContext> {
+        interface GameManagementTypes {
+          events: RPServerEvents;
+          hooks: RPServerHooks;
+          options: GameServerContextOptions;
+        }
+
+        class GameManagementService extends RPServerService<GameManagementTypes> {
+          private gameContext: GameServerContext;
+
+          constructor(context: GameServerContext) {
+            super(context);
+            this.gameContext = context;
+          }
+
           public getServerCapacity(): string {
-            return `Server can handle ${this.context.getMaxPlayers()} players on ${this.context.gameConfig.mapName}`;
+            return `Server can handle ${this.gameContext.getMaxPlayers()} players on ${this.gameContext.gameConfig.mapName}`;
           }
 
           public canEnablePvp(): boolean {
-            return this.context.isPvpEnabled();
+            return this.gameContext.isPvpEnabled();
           }
         }
 
@@ -748,17 +762,30 @@ describe('RPServerContext', () => {
       });
 
       it('should support racing services with racing context', () => {
-        class RaceManagementService extends RPServerService<RacingServerContext> {
+        interface RaceManagementTypes {
+          events: RPServerEvents;
+          hooks: RPServerHooks;
+          options: RacingContextOptions;
+        }
+
+        class RaceManagementService extends RPServerService<RaceManagementTypes> {
+          private racingContext: RacingServerContext;
+
+          constructor(context: RacingServerContext) {
+            super(context);
+            this.racingContext = context;
+          }
+
           public getRaceDetails(): string {
-            return this.context.getRaceInfo();
+            return this.racingContext.getRaceInfo();
           }
 
           public isVehicleDamageEnabled(): boolean {
-            return this.context.getVehicleSettings().damageEnabled;
+            return this.racingContext.getVehicleSettings().damageEnabled;
           }
 
           public getMaxSpeed(): number {
-            return this.context.getVehicleSettings().maxSpeed;
+            return this.racingContext.getVehicleSettings().maxSpeed;
           }
         }
 
@@ -789,18 +816,31 @@ describe('RPServerContext', () => {
     describe('integration with server creation', () => {
       it('should demonstrate full integration flow', async () => {
         // This test shows how the custom context would be used in practice
-        class IntegratedGameService extends RPServerService<GameServerContext> {
+        interface GameServerTypes {
+          events: RPServerEvents;
+          hooks: RPServerHooks;
+          options: GameServerContextOptions;
+        }
+
+        class IntegratedGameService extends RPServerService<GameServerTypes> {
+          private gameContext: GameServerContext;
+
+          constructor(context: GameServerContext) {
+            super(context);
+            this.gameContext = context;
+          }
+
           public async init(): Promise<void> {
             await super.init();
-            this.logger.info(`Initializing game server for ${this.context.gameConfig.mapName}`);
+            this.logger.info(`Initializing game server for ${this.gameContext.gameConfig.mapName}`);
           }
 
           public getGameStatus(): object {
             return {
-              map: this.context.gameConfig.mapName,
-              maxPlayers: this.context.getMaxPlayers(),
-              pvpEnabled: this.context.isPvpEnabled(),
-              economyEnabled: this.context.features.economySystem,
+              map: this.gameContext.gameConfig.mapName,
+              maxPlayers: this.gameContext.getMaxPlayers(),
+              pvpEnabled: this.gameContext.isPvpEnabled(),
+              economyEnabled: this.gameContext.features.economySystem,
             };
           }
         }

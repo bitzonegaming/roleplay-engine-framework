@@ -53,7 +53,7 @@ export interface AuthorizationMetadata {
 }
 
 /** Base class for API controllers */
-export abstract class ApiController<C extends RPServerContext = RPServerContext> {
+export abstract class ApiController<C = RPServerContext> {
   constructor(protected readonly context: C) {}
 
   /** Dispose the controller (called on shutdown) */
@@ -61,9 +61,7 @@ export abstract class ApiController<C extends RPServerContext = RPServerContext>
 }
 
 /** Constructor type for API controllers */
-export type ApiControllerCtor<C extends RPServerContext = RPServerContext> = new (
-  context: C,
-) => ApiController<C>;
+export type ApiControllerCtor<C = RPServerContext> = new (context: C) => ApiController<C>;
 
 /** Extended request with session information */
 export interface AuthorizedRequest extends FastifyRequest {

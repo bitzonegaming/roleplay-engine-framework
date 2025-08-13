@@ -21,7 +21,7 @@ import { getAuthorizationMetadata, getParamMetadata, ParamType } from './decorat
 /**
  * API Server that manages HTTP endpoints using Fastify and decorators
  */
-export class ApiServer<C extends RPServerContext = RPServerContext> {
+export class ApiServer<C = RPServerContext> {
   private readonly fastify: FastifyInstance;
   private readonly controllers: Map<ApiControllerCtor<C>, ApiController<C>> = new Map();
   private readonly context: C;
@@ -31,13 +31,13 @@ export class ApiServer<C extends RPServerContext = RPServerContext> {
   constructor(context: C, config: ApiServerConfig) {
     this.context = context;
     this.config = config;
-    this.logger = context.logger;
+    this.logger = (context as RPServerContext).logger;
 
     this.fastify = Fastify({
       logger: false, // We use our own logger
     });
 
-    this.fastify.setErrorHandler(createErrorHandler(context));
+    this.fastify.setErrorHandler(createErrorHandler(context as RPServerContext));
 
     if (config.cors) {
       this.fastify.register(cors, config.cors);
@@ -96,7 +96,7 @@ export class ApiServer<C extends RPServerContext = RPServerContext> {
           if (authMetadata?.sessionToken) {
             await validateSessionToken(
               authorizedRequest,
-              this.context,
+              this.context as RPServerContext,
               authMetadata.sessionToken.scope,
               authMetadata.sessionToken.accessPolicy,
             );

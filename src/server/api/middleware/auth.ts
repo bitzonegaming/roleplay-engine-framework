@@ -34,9 +34,9 @@ export async function validateApiKey(
 /**
  * Validates session token from Basic Auth header
  */
-export async function validateSessionToken(
+export async function validateSessionToken<C extends RPServerContext>(
   request: AuthorizedRequest,
-  context: RPServerContext,
+  context: C,
   scope: EndpointScope,
   accessPolicy?: AccessPolicy,
 ): Promise<void> {

@@ -10,7 +10,7 @@ import { LocalizationService } from '../../domains/localization/service';
  * @param context - The server context for accessing services
  * @returns The error handler function
  */
-export function createErrorHandler(context: RPServerContext) {
+export function createErrorHandler<C extends RPServerContext>(context: C) {
   return async function errorHandler(
     error: FastifyError | Error,
     request: FastifyRequest,
@@ -80,63 +80,4 @@ export function createErrorHandler(context: RPServerContext) {
       },
     });
   };
-}
-
-/**
- * Legacy error handler function for backward compatibility
- * @deprecated Use createErrorHandler instead for proper localization support
- */
-export async function errorHandler(
-  error: FastifyError | Error,
-  request: FastifyRequest,
-  reply: FastifyReply,
-): Promise<void> {
-  if (error instanceof EngineError) {
-    reply.status(error.statusCode).send({
-      key: error.key,
-      message: error.message,
-      params: error.params,
-    });
-    return;
-  }
-
-  if (error instanceof GamemodeServerError) {
-    reply.status(error.statusCode).send({
-      key: error.key,
-      message: error.message,
-      params: error.params,
-    });
-    return;
-  }
-
-  // Handle validation errors
-  if ('validation' in error && error.validation) {
-    reply.status(400).send({
-      key: 'VALIDATION_ERROR',
-      message: 'Request validation failed',
-      params: {
-        details: JSON.stringify(error.validation),
-      },
-    });
-    return;
-  }
-
-  // Handle other Fastify errors
-  if ('statusCode' in error && typeof error.statusCode === 'number') {
-    reply.status(error.statusCode).send({
-      key: 'HTTP_ERROR',
-      message: error.message,
-      params: {},
-    });
-    return;
-  }
-
-  // Default to 500 for unknown errors
-  reply.status(500).send({
-    key: 'INTERNAL_SERVER_ERROR',
-    message: 'An unexpected error occurred',
-    params: {
-      message: error.message,
-    },
-  });
 }

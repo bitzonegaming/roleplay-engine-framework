@@ -17,7 +17,7 @@ import { WorldService } from './domains/world/service';
 import { ConfigurationService } from './domains/configuration/service';
 import { LocalizationService } from './domains/localization/service';
 import { ReferenceService } from './domains/reference/service';
-import { ApiServer } from './api/api-server';
+import { ApiServer } from './api';
 
 // Mock external dependencies
 jest.mock('@bitzonegaming/roleplay-engine-sdk');

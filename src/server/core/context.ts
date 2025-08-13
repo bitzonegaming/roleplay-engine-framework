@@ -7,18 +7,19 @@ import { RPLogger } from '../../core/logger';
 import { RPServerEvents } from './events/events';
 import { RPServerHooks } from './hooks/hooks';
 import { RPServerService } from './server-service';
-
-/** Custom options that can be passed to server context extensions */
-export type CustomServerContextOptions = Record<string, unknown>;
+import { CustomServerContextOptions, IServiceContext } from './types';
 
 /** Configuration options for creating a server context */
-export interface RPServerContextOptions {
+export interface RPServerContextOptions<
+  TEvents extends RPServerEvents = RPServerEvents,
+  THooks extends RPServerHooks = RPServerHooks,
+> {
   /** The engine client for API communication */
   engineClient: EngineClient;
   /** Event emitter for server events */
-  eventEmitter: RPEventEmitter<RPServerEvents>;
+  eventEmitter: RPEventEmitter<TEvents>;
   /** Hook bus for server hooks */
-  hookBus: RPHookBus<RPServerHooks>;
+  hookBus: RPHookBus<THooks>;
   /** Logger instance */
   logger: RPLogger;
 }
@@ -26,8 +27,14 @@ export interface RPServerContextOptions {
 /** Constructor type for server context implementations */
 export type RPServerContextCtor<
   TOptions extends CustomServerContextOptions = CustomServerContextOptions,
-  TContext extends RPServerContext<TOptions> = RPServerContext<TOptions>,
-> = new (options: RPServerContextOptions & TOptions) => TContext;
+  TEvents extends RPServerEvents = RPServerEvents,
+  THooks extends RPServerHooks = RPServerHooks,
+  TContext extends RPServerContext<TOptions, TEvents, THooks> = RPServerContext<
+    TOptions,
+    TEvents,
+    THooks
+  >,
+> = new (options: RPServerContextOptions<TEvents, THooks> & TOptions) => TContext;
 
 /**
  * Server context that provides dependency injection and service management for the roleplay server.
@@ -82,14 +89,14 @@ export type RPServerContextCtor<
  */
 export class RPServerContext<
   TOptions extends CustomServerContextOptions = CustomServerContextOptions,
-> {
+  TEvents extends RPServerEvents = RPServerEvents,
+  THooks extends RPServerHooks = RPServerHooks,
+> implements IServiceContext<{ events: TEvents; hooks: THooks; options: TOptions }>
+{
   /** Cache of API instances to ensure singleton behavior */
   private readonly apis = new Map<new (c: EngineClient) => unknown, unknown>();
   /** Map of registered services */
-  private readonly services = new Map<
-    new (context: RPServerContext<TOptions>) => RPServerService,
-    RPServerService
-  >();
+  private readonly services = new Map<unknown, RPServerService>();
   /** Flag indicating whether the context has been initialized */
   private initialized = false;
 
@@ -99,22 +106,25 @@ export class RPServerContext<
   /** Logger instance for this context */
   public readonly logger: RPLogger;
   /** Event emitter for server-wide events */
-  public readonly eventEmitter: RPEventEmitter<RPServerEvents>;
+  public readonly eventEmitter: RPEventEmitter<TEvents>;
   /** Hook bus for server-wide hooks */
-  public readonly hookBus: RPHookBus<RPServerHooks>;
+  public readonly hookBus: RPHookBus<THooks>;
+  /** Custom options of the context */
+  public readonly customOptions: TOptions;
 
   /**
    * Creates a new server context with the provided infrastructure.
    *
    * @param options - The configuration options including client, emitter, hooks, and logger plus custom options
    */
-  constructor(options: RPServerContextOptions);
-  constructor(options: RPServerContextOptions & TOptions);
-  constructor(options: RPServerContextOptions & TOptions) {
+  constructor(options: RPServerContextOptions<TEvents, THooks>);
+  constructor(options: RPServerContextOptions<TEvents, THooks> & TOptions);
+  constructor(options: RPServerContextOptions<TEvents, THooks> & TOptions) {
     this.logger = options.logger;
     this.engineClient = options.engineClient;
     this.eventEmitter = options.eventEmitter;
     this.hookBus = options.hookBus;
+    this.customOptions = options;
 
     this.eventEmitter.setErrorHandler((error, event, payload) => {
       this.logger.error(`Async event handler error in '${event}':`, error, payload);
@@ -148,11 +158,16 @@ export class RPServerContext<
    * });
    * ```
    */
-  public static create<TOptions extends CustomServerContextOptions = CustomServerContextOptions>(
-    ctor: RPServerContextCtor<TOptions>,
-    options: RPServerContextOptions & TOptions,
-  ): RPServerContext<TOptions> {
-    return new ctor(options);
+  public static create<
+    TOptions extends CustomServerContextOptions = CustomServerContextOptions,
+    TEvents extends RPServerEvents = RPServerEvents,
+    THooks extends RPServerHooks = RPServerHooks,
+    TContext = RPServerContext<TOptions, TEvents, THooks>,
+  >(
+    ctor: new (options: RPServerContextOptions<TEvents, THooks> & TOptions) => TContext,
+    options: RPServerContextOptions<TEvents, THooks> & TOptions,
+  ): TContext {
+    return new ctor(options) as TContext;
   }
 
   /**
@@ -205,18 +220,13 @@ export class RPServerContext<
    * await context.init(); // Initializes all registered services
    * ```
    */
-  public addService<Service extends RPServerService>(
-    serviceConstructor: new (context: this) => Service,
-  ) {
+  public addService<Service>(serviceConstructor: new (context: this) => Service) {
     if (this.initialized) {
       throw new Error('Cannot add service after server start.');
     }
 
     const service = new serviceConstructor(this);
-    this.services.set(
-      serviceConstructor as unknown as new (context: RPServerContext<TOptions>) => RPServerService,
-      service,
-    );
+    this.services.set(serviceConstructor, service as unknown as RPServerService);
     return this;
   }
 
@@ -241,12 +251,8 @@ export class RPServerContext<
    * const session = sessionService.getSession('sess_456');
    * ```
    */
-  public getService<Service extends RPServerService>(
-    serviceConstructor: new (context: this) => Service,
-  ): Service {
-    const service = this.services.get(
-      serviceConstructor as unknown as new (context: RPServerContext<TOptions>) => RPServerService,
-    );
+  public getService<Service>(serviceConstructor: new (context: this) => Service): Service {
+    const service = this.services.get(serviceConstructor);
     if (!service) {
       throw new Error(`Service ${serviceConstructor.name} not registered in the context.`);
     }

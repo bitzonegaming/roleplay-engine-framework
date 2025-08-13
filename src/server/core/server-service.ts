@@ -1,29 +1,20 @@
 import { EngineClient } from '@bitzonegaming/roleplay-engine-sdk';
 
 import { RPEventEmitter } from '../../core/bus/event-emitter';
-import { RPHookBus } from '../../core/bus/hook-bus';
 import { RPLogger } from '../../core/logger';
+import { RPHookBus } from '../../core/bus/hook-bus';
 
 import { RPServerEvents } from './events/events';
 import { getEventHandlers } from './events/decorators';
-import { RPServerHooks } from './hooks/hooks';
-import { RPServerContext } from './context';
+import { IServiceContext, ServerTypes, ServiceConstructor } from './types';
 
 /**
  * Type definition for server event handler methods.
  * Maps event names to their corresponding handler functions.
  */
-export type RPServerEventHandlerMethods = {
-  [K in keyof RPServerEvents]?: (payload: RPServerEvents[K]) => void | Promise<void>;
+export type RPServerEventHandlerMethods<Events = RPServerEvents> = {
+  [K in keyof Events]?: (payload: Events[K]) => void | Promise<void>;
 };
-
-/**
- * Constructor type for server services.
- * @template C - The server context type
- */
-export type RPServerServiceCtor<C extends RPServerContext = RPServerContext> = new (
-  ctx: C,
-) => RPServerService<C>;
 
 /**
  * Abstract base class for all server services in the Roleplay Engine.
@@ -64,11 +55,11 @@ export type RPServerServiceCtor<C extends RPServerContext = RPServerContext> = n
  * }
  * ```
  */
-export abstract class RPServerService<C extends RPServerContext = RPServerContext> {
-  public readonly eventHandlers: RPServerEventHandlerMethods;
 
-  protected readonly eventEmitter: RPEventEmitter<RPServerEvents>;
-  protected readonly hookBus: RPHookBus<RPServerHooks>;
+export abstract class RPServerService<T extends ServerTypes = ServerTypes> {
+  public readonly eventHandlers: RPServerEventHandlerMethods<T['events']>;
+  protected readonly eventEmitter: RPEventEmitter<T['events']>;
+  protected readonly hookBus: RPHookBus<T['hooks']>;
   protected readonly logger: RPLogger;
 
   [key: string]: unknown;
@@ -81,7 +72,7 @@ export abstract class RPServerService<C extends RPServerContext = RPServerContex
    *
    * @param context - The server context providing shared infrastructure
    */
-  public constructor(protected readonly context: C) {
+  public constructor(protected readonly context: IServiceContext<T>) {
     this.eventEmitter = context.eventEmitter;
     this.hookBus = context.hookBus;
     this.logger = context.logger;
@@ -129,10 +120,10 @@ export abstract class RPServerService<C extends RPServerContext = RPServerContex
    * @returns A map of event names to their bound handler functions
    */
   private bindEventEmitters(
-    eventEmitter: RPEventEmitter<RPServerEvents>,
-  ): RPServerEventHandlerMethods {
-    const handlers = getEventHandlers(this) || [];
-    const handlerMethods: RPServerEventHandlerMethods = {};
+    eventEmitter: RPEventEmitter<T['events']>,
+  ): RPServerEventHandlerMethods<T['events']> {
+    const handlers = getEventHandlers<T['events']>(this) || [];
+    const handlerMethods: RPServerEventHandlerMethods<T['events']> = {};
     for (const { method, event } of handlers) {
       const fn = (this as Record<string, unknown>)[method];
       if (typeof fn === 'function') {
@@ -180,9 +171,9 @@ export abstract class RPServerService<C extends RPServerContext = RPServerContex
    * const account = await accountService.getAccount(accountId);
    * ```
    */
-  protected getService<Service extends RPServerService>(
-    ServiceConstructor: new (context: C) => Service,
+  protected getService<Service>(
+    ServiceConstructor: new (context: IServiceContext<T>) => Service,
   ): Service {
-    return this.context.getService(ServiceConstructor);
+    return this.context.getService(ServiceConstructor as ServiceConstructor<Service, unknown>);
   }
 }

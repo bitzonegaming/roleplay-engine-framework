@@ -12,6 +12,7 @@ import { RPServerService } from './server-service';
 import { OnServer } from './events/decorators';
 import { RPServerEvents } from './events/events';
 import { RPServerHooks } from './hooks/hooks';
+import { IServiceContext, ServerTypes } from './types';
 
 // Test service implementation
 class TestService extends RPServerService {
@@ -32,10 +33,12 @@ class TestService extends RPServerService {
     return 'test';
   }
 
-  public testGetService<Service extends RPServerService>(
+  public testGetService<Service>(
     ServiceConstructor: new (context: RPServerContext) => Service,
   ): Service {
-    return this.getService(ServiceConstructor);
+    return this.getService(
+      ServiceConstructor as unknown as new (context: IServiceContext<ServerTypes>) => Service,
+    );
   }
 
   @OnServer('sessionStarted')
@@ -365,11 +368,24 @@ describe('RPServerService', () => {
         customMethod(): string;
       }
 
+      // Define custom server types
+      interface CustomServerTypes {
+        events: RPServerEvents;
+        hooks: RPServerHooks;
+        options: { customProperty: string };
+      }
+
       // Create a service that uses the custom context
-      class CustomContextService extends RPServerService<CustomServerContext> {
+      class CustomContextService extends RPServerService<CustomServerTypes> {
+        private customContext: CustomServerContext;
+
+        constructor(context: CustomServerContext) {
+          super(context);
+          this.customContext = context;
+        }
+
         public getCustomData(): string {
-          // this.context is now typed as CustomServerContext
-          return this.context.customProperty + ' - ' + this.context.customMethod();
+          return this.customContext.customProperty + ' - ' + this.customContext.customMethod();
         }
       }
 
@@ -388,13 +404,13 @@ describe('RPServerService', () => {
 
     it('should default to RPServerContext when no generic is specified', () => {
       class DefaultContextService extends RPServerService {
-        public getContext(): RPServerContext {
-          return this.context; // Should be typed as RPServerContext
+        public getContextLogger() {
+          return this.logger; // Should work with default types
         }
       }
 
       const defaultService = new DefaultContextService(mockContext);
-      expect(defaultService.getContext()).toBe(mockContext);
+      expect(defaultService.getContextLogger()).toBe(mockLogger);
     });
 
     it('should demonstrate game server context example', () => {
@@ -406,10 +422,24 @@ describe('RPServerService', () => {
         };
       }
 
+      // Define game server types
+      interface GameServerTypes {
+        events: RPServerEvents;
+        hooks: RPServerHooks;
+        options: { gameWorld: GameServerContext['gameWorld'] };
+      }
+
       // Example: Player management service for game server
-      class PlayerService extends RPServerService<GameServerContext> {
+      class PlayerService extends RPServerService<GameServerTypes> {
+        private gameContext: GameServerContext;
+
+        constructor(context: GameServerContext) {
+          super(context);
+          this.gameContext = context;
+        }
+
         public getPlayerVehicle(playerId: string): string | undefined {
-          const player = this.context.gameWorld.getPlayer(playerId);
+          const player = this.gameContext.gameWorld.getPlayer(playerId);
           return player.vehicle;
         }
       }

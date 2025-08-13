@@ -8,12 +8,8 @@ import { RPServerEvents } from './core/events/events';
 import { RPServerHooks } from './core/hooks/hooks';
 import { EngineSocket } from './socket/socket';
 import { SessionService } from './domains/session/service';
-import {
-  CustomServerContextOptions,
-  RPServerContext,
-  RPServerContextCtor,
-  RPServerContextOptions,
-} from './core/context';
+import { RPServerContext, RPServerContextCtor, RPServerContextOptions } from './core/context';
+import { CustomServerContextOptions } from './core/types';
 import { RPS2CEventHandler } from './s2c/server-to-client-event-handler';
 import { NativeS2CEventsAdapter } from './natives/server-to-client-events-adapter';
 import { AccountService } from './domains/account/service';
@@ -46,15 +42,19 @@ export interface RPServerOptions {
 }
 
 /** Native integrations and customization options for the server */
-export interface RPServerNatives {
+export interface RPServerNatives<
+  TOptions extends CustomServerContextOptions = CustomServerContextOptions,
+  TEvents extends RPServerEvents = RPServerEvents,
+  THooks extends RPServerHooks = RPServerHooks,
+> {
   /** Adapter for server-to-client event handling with the game engine */
   s2cEventsAdapter: NativeS2CEventsAdapter;
   /** Optional custom server context configuration */
   customContext?: {
     /** Custom context constructor type */
-    type: RPServerContextCtor;
+    type: RPServerContextCtor<TOptions, TEvents, THooks>;
     /** Additional options for the custom context */
-    options: CustomServerContextOptions;
+    options: TOptions;
   };
 }
 
@@ -197,8 +197,12 @@ export class RPServer {
    * });
    * ```
    */
-  public static create(config: RPServerOptions, natives: RPServerNatives): RPServer {
-    this.instance = new RPServer(config, natives);
+  public static create<
+    TOptions extends CustomServerContextOptions = CustomServerContextOptions,
+    TEvents extends RPServerEvents = RPServerEvents,
+    THooks extends RPServerHooks = RPServerHooks,
+  >(config: RPServerOptions, natives: RPServerNatives<TOptions, TEvents, THooks>): RPServer {
+    this.instance = new RPServer(config, natives as RPServerNatives);
     return this.instance;
   }
 

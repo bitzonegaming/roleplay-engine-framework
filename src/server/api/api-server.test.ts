@@ -5,11 +5,8 @@ import { EngineClient } from '@bitzonegaming/roleplay-engine-sdk';
 import { RPEventEmitter } from '../../core/bus/event-emitter';
 import { RPHookBus } from '../../core/bus/hook-bus';
 import { MockEngineClient, MockLogger } from '../../../test/mocks';
-import {
-  CustomServerContextOptions,
-  RPServerContext,
-  RPServerContextOptions,
-} from '../core/context';
+import { RPServerContext, RPServerContextOptions } from '../core/context';
+import { CustomServerContextOptions } from '../core/types';
 import { RPServerEvents } from '../core/events/events';
 import { RPServerHooks } from '../core/hooks/hooks';
 import { ConflictError } from '../core/errors';
