@@ -3,9 +3,11 @@ import {
   AccountAuthRequest,
   GrantAccessResult,
   ExternalLoginAuthRequest,
+  RedirectUri,
 } from '@bitzonegaming/roleplay-engine-sdk';
 import { ExternalLoginPreAuthRequest } from '@bitzonegaming/roleplay-engine-sdk/account/models/external-login-pre-auth-request';
 import { ExternalLoginPreAuthResult } from '@bitzonegaming/roleplay-engine-sdk/account/models/external-login-pre-auth-result';
+import { DiscordUserAccountInfo } from '@bitzonegaming/roleplay-engine-sdk/discord/models/discord-user-account-info';
 
 import { ApiTestServer } from '../../../../test/api-test-utils';
 import { SessionService } from '../session/service';
@@ -37,6 +39,10 @@ describe('AccountController Integration', () => {
       authWithPassword: jest.fn(),
       preAuthExternalLogin: jest.fn(),
       authExternalLogin: jest.fn(),
+      getDiscordUser: jest.fn(),
+      authDiscordImplicitFlow: jest.fn(),
+      getDiscordOAuthAuthorizeUrl: jest.fn(),
+      authDiscordOAuthFlow: jest.fn(),
     } as unknown as jest.Mocked<AccountService>;
 
     mockSessionService = {
@@ -505,6 +511,373 @@ describe('AccountController Integration', () => {
           'content-type': 'application/json',
         },
         payload: authRequest,
+      });
+
+      expect(response.statusCode).toBe(401);
+      const responseBody = JSON.parse(response.payload);
+      expect(responseBody.key).toBe('SESSION_TOKEN_MISSING');
+    });
+  });
+
+  describe('GET /accounts/discord', () => {
+    const discordUserInfo: DiscordUserAccountInfo = {
+      accountExists: false,
+      usernameRegex: '^[a-zA-Z0-9_]{3,16}$',
+      emailRequired: true,
+      userId: 'discord_123',
+      isMemberOfGuild: true,
+      isWhitelisted: true,
+      roles: ['@everyone', 'Member'],
+      username: 'testuser',
+    };
+
+    const sessionToken = Buffer.from(`${testSessionId}:session_token_123`).toString('base64');
+    const authHeader = `Basic ${sessionToken}`;
+
+    it('should get Discord user successfully when session has no account', async () => {
+      const expectedTokenHash = generateSessionTokenHash(testSessionId, 'session_token_123');
+
+      const sessionWithoutAccount: RPSession = {
+        id: testSessionId,
+        tokenHash: expectedTokenHash,
+        hash: 'session_hash',
+      };
+
+      mockSessionService.getSession.mockReturnValue(sessionWithoutAccount);
+      mockAccountService.getDiscordUser.mockResolvedValue(discordUserInfo);
+
+      const fastify = testServer.getFastify();
+      const response = await fastify.inject({
+        method: 'GET',
+        url: '/accounts/discord',
+        headers: {
+          authorization: authHeader,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(JSON.parse(response.payload)).toEqual(discordUserInfo);
+      expect(mockSessionService.getSession).toHaveBeenCalledWith(testSessionId);
+      expect(mockAccountService.getDiscordUser).toHaveBeenCalledWith(testSessionId);
+    });
+
+    it('should get Discord user successfully even when session has an account', async () => {
+      const expectedTokenHash = generateSessionTokenHash(testSessionId, 'session_token_123');
+
+      const sessionWithAccount: RPSession = {
+        id: testSessionId,
+        tokenHash: expectedTokenHash,
+        hash: 'session_hash',
+        account: {
+          id: 'existing_acc',
+          username: 'existinguser',
+          segmentDefinitionIds: [],
+          authorizedDate: Date.now(),
+        },
+      };
+
+      mockSessionService.getSession.mockReturnValue(sessionWithAccount);
+      mockAccountService.getDiscordUser.mockResolvedValue(discordUserInfo);
+
+      const fastify = testServer.getFastify();
+      const response = await fastify.inject({
+        method: 'GET',
+        url: '/accounts/discord',
+        headers: {
+          authorization: authHeader,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(JSON.parse(response.payload)).toEqual(discordUserInfo);
+      expect(mockSessionService.getSession).toHaveBeenCalledWith(testSessionId);
+      expect(mockAccountService.getDiscordUser).toHaveBeenCalledWith(testSessionId);
+    });
+
+    it('should return 401 when no authorization header is provided', async () => {
+      const fastify = testServer.getFastify();
+      const response = await fastify.inject({
+        method: 'GET',
+        url: '/accounts/discord',
+        headers: {},
+      });
+
+      expect(response.statusCode).toBe(401);
+      const responseBody = JSON.parse(response.payload);
+      expect(responseBody.key).toBe('SESSION_TOKEN_MISSING');
+    });
+  });
+
+  describe('POST /accounts/discord/auth', () => {
+    const implicitAuthRequest = {
+      discordUserId: 'discord_user_123',
+    };
+
+    const grantAccessResult: GrantAccessResult = {
+      access_token: 'access_token_123',
+      account_id: 'acc_test123',
+      token_type: 'Bearer',
+      expires_in: 3600,
+    };
+
+    const sessionToken = Buffer.from(`${testSessionId}:session_token_123`).toString('base64');
+    const authHeader = `Basic ${sessionToken}`;
+
+    it('should authenticate successfully when session has no account', async () => {
+      const expectedTokenHash = generateSessionTokenHash(testSessionId, 'session_token_123');
+
+      const sessionWithoutAccount: RPSession = {
+        id: testSessionId,
+        tokenHash: expectedTokenHash,
+        hash: 'session_hash',
+      };
+
+      mockSessionService.getSession.mockReturnValue(sessionWithoutAccount);
+      mockAccountService.authDiscordImplicitFlow.mockResolvedValue(grantAccessResult);
+
+      const fastify = testServer.getFastify();
+      const response = await fastify.inject({
+        method: 'POST',
+        url: '/accounts/discord/auth',
+        headers: {
+          authorization: authHeader,
+          'content-type': 'application/json',
+        },
+        payload: implicitAuthRequest,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(JSON.parse(response.payload)).toEqual(grantAccessResult);
+      expect(mockSessionService.getSession).toHaveBeenCalledWith(testSessionId);
+      expect(mockAccountService.authDiscordImplicitFlow).toHaveBeenCalledWith({
+        sessionId: testSessionId,
+        ...implicitAuthRequest,
+      });
+    });
+
+    it('should return 409 conflict when session already has an account', async () => {
+      const expectedTokenHash = generateSessionTokenHash(testSessionId, 'session_token_123');
+
+      const sessionWithAccount: RPSession = {
+        id: testSessionId,
+        tokenHash: expectedTokenHash,
+        hash: 'session_hash',
+        account: {
+          id: 'existing_acc',
+          username: 'existinguser',
+          segmentDefinitionIds: [],
+          authorizedDate: Date.now(),
+        },
+      };
+
+      mockSessionService.getSession.mockReturnValue(sessionWithAccount);
+
+      const fastify = testServer.getFastify();
+      const response = await fastify.inject({
+        method: 'POST',
+        url: '/accounts/discord/auth',
+        headers: {
+          authorization: authHeader,
+          'content-type': 'application/json',
+        },
+        payload: implicitAuthRequest,
+      });
+
+      expect(response.statusCode).toBe(409);
+      const responseBody = JSON.parse(response.payload);
+      expect(responseBody.key).toBe('SESSION_HAS_AUTHORIZED');
+      expect(mockAccountService.authDiscordImplicitFlow).not.toHaveBeenCalled();
+    });
+
+    it('should return 401 when no authorization header is provided', async () => {
+      const fastify = testServer.getFastify();
+      const response = await fastify.inject({
+        method: 'POST',
+        url: '/accounts/discord/auth',
+        headers: {
+          'content-type': 'application/json',
+        },
+        payload: implicitAuthRequest,
+      });
+
+      expect(response.statusCode).toBe(401);
+      const responseBody = JSON.parse(response.payload);
+      expect(responseBody.key).toBe('SESSION_TOKEN_MISSING');
+    });
+  });
+
+  describe('GET /accounts/discord/oauth/authorize', () => {
+    const redirectUri: RedirectUri = {
+      uri: 'https://discord.com/oauth2/authorize?client_id=123&redirect_uri=...',
+    };
+
+    const sessionToken = Buffer.from(`${testSessionId}:session_token_123`).toString('base64');
+    const authHeader = `Basic ${sessionToken}`;
+
+    it('should get OAuth URL successfully when session has no account', async () => {
+      const expectedTokenHash = generateSessionTokenHash(testSessionId, 'session_token_123');
+
+      const sessionWithoutAccount: RPSession = {
+        id: testSessionId,
+        tokenHash: expectedTokenHash,
+        hash: 'session_hash',
+      };
+
+      mockSessionService.getSession.mockReturnValue(sessionWithoutAccount);
+      mockAccountService.getDiscordOAuthAuthorizeUrl.mockResolvedValue(redirectUri);
+
+      const fastify = testServer.getFastify();
+      const response = await fastify.inject({
+        method: 'GET',
+        url: '/accounts/discord/oauth/authorize',
+        headers: {
+          authorization: authHeader,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(JSON.parse(response.payload)).toEqual(redirectUri);
+      expect(mockSessionService.getSession).toHaveBeenCalledWith(testSessionId);
+      expect(mockAccountService.getDiscordOAuthAuthorizeUrl).toHaveBeenCalled();
+    });
+
+    it('should return 409 conflict when session already has an account', async () => {
+      const expectedTokenHash = generateSessionTokenHash(testSessionId, 'session_token_123');
+
+      const sessionWithAccount: RPSession = {
+        id: testSessionId,
+        tokenHash: expectedTokenHash,
+        hash: 'session_hash',
+        account: {
+          id: 'existing_acc',
+          username: 'existinguser',
+          segmentDefinitionIds: [],
+          authorizedDate: Date.now(),
+        },
+      };
+
+      mockSessionService.getSession.mockReturnValue(sessionWithAccount);
+
+      const fastify = testServer.getFastify();
+      const response = await fastify.inject({
+        method: 'GET',
+        url: '/accounts/discord/oauth/authorize',
+        headers: {
+          authorization: authHeader,
+        },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const responseBody = JSON.parse(response.payload);
+      expect(responseBody.key).toBe('SESSION_HAS_AUTHORIZED');
+      expect(mockAccountService.getDiscordOAuthAuthorizeUrl).not.toHaveBeenCalled();
+    });
+
+    it('should return 401 when no authorization header is provided', async () => {
+      const fastify = testServer.getFastify();
+      const response = await fastify.inject({
+        method: 'GET',
+        url: '/accounts/discord/oauth/authorize',
+        headers: {},
+      });
+
+      expect(response.statusCode).toBe(401);
+      const responseBody = JSON.parse(response.payload);
+      expect(responseBody.key).toBe('SESSION_TOKEN_MISSING');
+    });
+  });
+
+  describe('POST /accounts/discord/oauth/token', () => {
+    const oauthTokenRequest = {
+      code: 'oauth_code_123',
+      state: 'state_token_123',
+    };
+
+    const grantAccessResult: GrantAccessResult = {
+      access_token: 'access_token_123',
+      account_id: 'acc_test123',
+      token_type: 'Bearer',
+      expires_in: 3600,
+    };
+
+    const sessionToken = Buffer.from(`${testSessionId}:session_token_123`).toString('base64');
+    const authHeader = `Basic ${sessionToken}`;
+
+    it('should authenticate successfully when session has no account', async () => {
+      const expectedTokenHash = generateSessionTokenHash(testSessionId, 'session_token_123');
+
+      const sessionWithoutAccount: RPSession = {
+        id: testSessionId,
+        tokenHash: expectedTokenHash,
+        hash: 'session_hash',
+      };
+
+      mockSessionService.getSession.mockReturnValue(sessionWithoutAccount);
+      mockAccountService.authDiscordOAuthFlow.mockResolvedValue(grantAccessResult);
+
+      const fastify = testServer.getFastify();
+      const response = await fastify.inject({
+        method: 'POST',
+        url: '/accounts/discord/oauth/token',
+        headers: {
+          authorization: authHeader,
+          'content-type': 'application/json',
+        },
+        payload: oauthTokenRequest,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(JSON.parse(response.payload)).toEqual(grantAccessResult);
+      expect(mockSessionService.getSession).toHaveBeenCalledWith(testSessionId);
+      expect(mockAccountService.authDiscordOAuthFlow).toHaveBeenCalledWith({
+        ...oauthTokenRequest,
+        redirectType: expect.any(String),
+      });
+    });
+
+    it('should return 409 conflict when session already has an account', async () => {
+      const expectedTokenHash = generateSessionTokenHash(testSessionId, 'session_token_123');
+
+      const sessionWithAccount: RPSession = {
+        id: testSessionId,
+        tokenHash: expectedTokenHash,
+        hash: 'session_hash',
+        account: {
+          id: 'existing_acc',
+          username: 'existinguser',
+          segmentDefinitionIds: [],
+          authorizedDate: Date.now(),
+        },
+      };
+
+      mockSessionService.getSession.mockReturnValue(sessionWithAccount);
+
+      const fastify = testServer.getFastify();
+      const response = await fastify.inject({
+        method: 'POST',
+        url: '/accounts/discord/oauth/token',
+        headers: {
+          authorization: authHeader,
+          'content-type': 'application/json',
+        },
+        payload: oauthTokenRequest,
+      });
+
+      expect(response.statusCode).toBe(409);
+      const responseBody = JSON.parse(response.payload);
+      expect(responseBody.key).toBe('SESSION_HAS_AUTHORIZED');
+      expect(mockAccountService.authDiscordOAuthFlow).not.toHaveBeenCalled();
+    });
+
+    it('should return 401 when no authorization header is provided', async () => {
+      const fastify = testServer.getFastify();
+      const response = await fastify.inject({
+        method: 'POST',
+        url: '/accounts/discord/oauth/token',
+        headers: {
+          'content-type': 'application/json',
+        },
+        payload: oauthTokenRequest,
       });
 
       expect(response.statusCode).toBe(401);

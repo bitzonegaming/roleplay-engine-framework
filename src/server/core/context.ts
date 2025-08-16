@@ -206,16 +206,20 @@ export class RPServerContext<
    * services can be retrieved using getService() and will be automatically
    * initialized when the context is initialized.
    *
-   * @param serviceConstructor - The service class constructor to register
+   * @param serviceConstructor - The service class constructor to register (can be concrete or abstract)
    * @returns The context instance for method chaining
    * @throws {Error} When attempting to add a service after initialization
    *
    * @example
    * ```typescript
+   * // Register concrete services
    * context
    *   .addService(AccountService)
    *   .addService(SessionService)
    *   .addService(WorldService);
+   *
+   * // Register a concrete implementation of an abstract service
+   * context.addService(RPDiscordService); // RPDiscordService extends abstract DiscordService
    *
    * await context.init(); // Initializes all registered services
    * ```
@@ -226,7 +230,16 @@ export class RPServerContext<
     }
 
     const service = new serviceConstructor(this);
+
     this.services.set(serviceConstructor, service as unknown as RPServerService);
+
+    const parentClass = Object.getPrototypeOf(serviceConstructor);
+    if (parentClass && parentClass !== Function.prototype && parentClass.name) {
+      if (!this.services.has(parentClass)) {
+        this.services.set(parentClass, service as unknown as RPServerService);
+      }
+    }
+
     return this;
   }
 
@@ -235,23 +248,32 @@ export class RPServerContext<
    *
    * Services are singletons within the context - each service type is
    * instantiated only once and the same instance is returned for all requests.
+   * Supports retrieving services by both their concrete and abstract class constructors.
    *
    * @template Service - The service class type
-   * @param serviceConstructor - The service class constructor
+   * @param serviceConstructor - The service class constructor (can be abstract or concrete)
    * @returns The singleton instance of the requested service
    * @throws {Error} When the requested service is not registered
    *
    * @example
    * ```typescript
+   * // Get by concrete class
    * const accountService = context.getService(AccountService);
    * const sessionService = context.getService(SessionService);
+   *
+   * // Get by abstract class (returns the registered concrete implementation)
+   * const discordService = context.getService(DiscordService); // Returns RPDiscordService instance
    *
    * // Use the services
    * const account = await accountService.getAccount('acc_123');
    * const session = sessionService.getSession('sess_456');
    * ```
    */
-  public getService<Service>(serviceConstructor: new (context: this) => Service): Service {
+  public getService<Service>(
+    serviceConstructor:
+      | (new (context: this) => Service)
+      | (abstract new (context: this) => Service),
+  ): Service {
     const service = this.services.get(serviceConstructor);
     if (!service) {
       throw new Error(`Service ${serviceConstructor.name} not registered in the context.`);
@@ -287,7 +309,8 @@ export class RPServerContext<
     }
 
     this.initialized = true;
-    for (const service of this.services.values()) {
+    const uniqueServices = new Set(this.services.values());
+    for (const service of uniqueServices) {
       await service.init();
     }
   }
@@ -313,9 +336,8 @@ export class RPServerContext<
       return;
     }
 
-    // Dispose services in reverse order
-    const services = Array.from(this.services.values()).reverse();
-    for (const service of services) {
+    const uniqueServices = Array.from(new Set(this.services.values())).reverse();
+    for (const service of uniqueServices) {
       try {
         await service.dispose();
       } catch (error) {

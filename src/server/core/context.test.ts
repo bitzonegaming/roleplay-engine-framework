@@ -279,7 +279,7 @@ describe('RPServerContext', () => {
       const result = context.addService(TestService);
 
       expect(result).toBe(context); // Returns this for chaining
-      expect(context['services'].size).toBe(1);
+      expect(context['services'].size).toBe(2);
       expect(context['services'].has(TestService)).toBe(true);
     });
 
@@ -287,7 +287,7 @@ describe('RPServerContext', () => {
       const result = context.addService(TestService).addService(AnotherTestService);
 
       expect(result).toBe(context);
-      expect(context['services'].size).toBe(2);
+      expect(context['services'].size).toBe(3);
     });
 
     it('should create service instances with context injection', () => {
@@ -313,8 +313,7 @@ describe('RPServerContext', () => {
         context.addService(TestService);
       }).not.toThrow();
 
-      // Second registration should replace the first
-      expect(context['services'].size).toBe(1);
+      expect(context['services'].size).toBe(2);
     });
   });
 
@@ -874,6 +873,251 @@ describe('RPServerContext', () => {
 
         await gameContext.dispose();
       });
+    });
+  });
+
+  describe('abstract service support', () => {
+    // Abstract service for testing
+    abstract class AbstractService extends RPServerService {
+      abstract getValue(): string;
+
+      abstract processData(data: string): Promise<string>;
+    }
+
+    // Concrete implementation
+    class ConcreteService extends AbstractService {
+      getValue(): string {
+        return 'concrete-value';
+      }
+
+      async processData(data: string): Promise<string> {
+        return `processed: ${data}`;
+      }
+    }
+
+    // Another concrete implementation
+    class AlternativeService extends AbstractService {
+      getValue(): string {
+        return 'alternative-value';
+      }
+
+      async processData(data: string): Promise<string> {
+        return `alternative: ${data}`;
+      }
+    }
+
+    // Service that depends on abstract service
+    class DependentService extends RPServerService {
+      public async performOperation(): Promise<string> {
+        const abstractService = this.getService(AbstractService);
+        const value = abstractService.getValue();
+        const processed = await abstractService.processData(value);
+        return processed;
+      }
+
+      public getAbstractServiceInstance(): AbstractService {
+        return this.getService(AbstractService);
+      }
+    }
+
+    it('should register concrete implementation of abstract service', () => {
+      expect(() => {
+        context.addService(ConcreteService);
+      }).not.toThrow();
+
+      expect(context['services'].has(ConcreteService)).toBe(true);
+    });
+
+    it('should retrieve concrete service via abstract class reference', () => {
+      context.addService(ConcreteService);
+
+      const service = context.getService(AbstractService);
+
+      expect(service).toBeInstanceOf(ConcreteService);
+      expect(service.getValue()).toBe('concrete-value');
+    });
+
+    it('should retrieve concrete service via concrete class reference', () => {
+      context.addService(ConcreteService);
+
+      const service = context.getService(ConcreteService);
+
+      expect(service).toBeInstanceOf(ConcreteService);
+      expect(service.getValue()).toBe('concrete-value');
+    });
+
+    it('should allow other services to use abstract service references', async () => {
+      context.addService(ConcreteService);
+      context.addService(DependentService);
+
+      const dependent = context.getService(DependentService) as DependentService;
+      const result = await dependent.performOperation();
+
+      expect(result).toBe('processed: concrete-value');
+    });
+
+    it('should return same instance when accessed via abstract or concrete reference', () => {
+      context.addService(ConcreteService);
+
+      const abstractRef = context.getService(AbstractService);
+      const concreteRef = context.getService(ConcreteService);
+
+      expect(abstractRef).toBe(concreteRef);
+    });
+
+    it('should throw error when abstract service is not registered', () => {
+      context.addService(DependentService);
+      const dependent = context.getService(DependentService) as DependentService;
+
+      expect(() => {
+        dependent.getAbstractServiceInstance();
+      }).toThrow('Service AbstractService not registered in the context.');
+    });
+
+    it('should use first registered implementation for abstract reference', () => {
+      context.addService(ConcreteService);
+      context.addService(AlternativeService); // This won't override abstract reference
+
+      // Abstract reference should get first registered implementation
+      const abstractService = context.getService(AbstractService);
+      expect(abstractService).toBeInstanceOf(ConcreteService);
+      expect(abstractService.getValue()).toBe('concrete-value');
+
+      // But both concrete services are accessible via their concrete types
+      const concreteService = context.getService(ConcreteService);
+      const alternativeService = context.getService(AlternativeService);
+
+      expect(concreteService.getValue()).toBe('concrete-value');
+      expect(alternativeService.getValue()).toBe('alternative-value');
+    });
+
+    it('should work with initialization lifecycle', async () => {
+      class InitializableConcreteService extends AbstractService {
+        public initialized = false;
+
+        public async init(): Promise<void> {
+          await super.init();
+          this.initialized = true;
+        }
+
+        getValue(): string {
+          return this.initialized ? 'initialized-value' : 'not-initialized';
+        }
+
+        async processData(data: string): Promise<string> {
+          return data;
+        }
+      }
+
+      context.addService(InitializableConcreteService);
+
+      const serviceBeforeInit = context.getService(AbstractService) as InitializableConcreteService;
+      expect(serviceBeforeInit.getValue()).toBe('not-initialized');
+
+      await context.init();
+
+      const serviceAfterInit = context.getService(AbstractService) as InitializableConcreteService;
+      expect(serviceAfterInit.getValue()).toBe('initialized-value');
+      expect(serviceAfterInit.initialized).toBe(true);
+    });
+
+    it('should support multiple abstract services in the same context', () => {
+      abstract class AnotherAbstractService extends RPServerService {
+        abstract getNumber(): number;
+      }
+
+      class AnotherConcreteService extends AnotherAbstractService {
+        getNumber(): number {
+          return 42;
+        }
+      }
+
+      context.addService(ConcreteService);
+      context.addService(AnotherConcreteService);
+
+      const firstAbstract = context.getService(AbstractService);
+      const secondAbstract = context.getService(AnotherAbstractService);
+
+      expect(firstAbstract).toBeInstanceOf(ConcreteService);
+      expect(secondAbstract).toBeInstanceOf(AnotherConcreteService);
+      expect(firstAbstract.getValue()).toBe('concrete-value');
+      expect(secondAbstract.getNumber()).toBe(42);
+    });
+
+    it('should handle complex inheritance chains', () => {
+      abstract class BaseAbstractService extends RPServerService {
+        abstract getBase(): string;
+      }
+
+      abstract class ExtendedAbstractService extends BaseAbstractService {
+        abstract getExtended(): string;
+      }
+
+      class FinalConcreteService extends ExtendedAbstractService {
+        getBase(): string {
+          return 'base';
+        }
+
+        getExtended(): string {
+          return 'extended';
+        }
+      }
+
+      context.addService(FinalConcreteService);
+
+      // Should be accessible via immediate parent abstract class
+      const extendedRef = context.getService(ExtendedAbstractService);
+      expect(extendedRef).toBeInstanceOf(FinalConcreteService);
+      expect(extendedRef.getExtended()).toBe('extended');
+
+      // Should be accessible via concrete class
+      const concreteRef = context.getService(FinalConcreteService);
+      expect(concreteRef).toBeInstanceOf(FinalConcreteService);
+      expect(concreteRef.getBase()).toBe('base');
+    });
+
+    it('should work with real-world scenario like Discord service', () => {
+      // Simulating the actual Discord service scenario
+      abstract class DiscordService extends RPServerService {
+        abstract getDiscordUserId(sessionId: string): string | undefined;
+      }
+
+      class RPDiscordService extends DiscordService {
+        private sessionDiscordMap = new Map<string, string>([
+          ['session1', 'discord_user_123'],
+          ['session2', 'discord_user_456'],
+        ]);
+
+        getDiscordUserId(sessionId: string): string | undefined {
+          return this.sessionDiscordMap.get(sessionId);
+        }
+      }
+
+      class AccountService extends RPServerService {
+        public authenticateWithDiscord(sessionId: string): string | null {
+          const discordService = this.getService(DiscordService);
+          const discordUserId = discordService.getDiscordUserId(sessionId);
+
+          if (!discordUserId) {
+            return null;
+          }
+
+          return `authenticated_${discordUserId}`;
+        }
+      }
+
+      context.addService(RPDiscordService);
+      context.addService(AccountService);
+
+      const accountService = context.getService(AccountService) as AccountService;
+
+      expect(accountService.authenticateWithDiscord('session1')).toBe(
+        'authenticated_discord_user_123',
+      );
+      expect(accountService.authenticateWithDiscord('session2')).toBe(
+        'authenticated_discord_user_456',
+      );
+      expect(accountService.authenticateWithDiscord('session3')).toBeNull();
     });
   });
 });

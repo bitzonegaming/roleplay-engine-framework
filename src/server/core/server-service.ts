@@ -159,20 +159,27 @@ export abstract class RPServerService<T extends ServerTypes = ServerTypes> {
    * Gets another service instance from the server context.
    *
    * Use this to access functionality provided by other services. Services are
-   * singletons within the server context.
+   * singletons within the server context. Supports retrieving services by both
+   * their concrete and abstract class constructors.
    *
    * @template Service - The service class type
-   * @param ServiceConstructor - The service class constructor
+   * @param ServiceConstructor - The service class constructor (can be abstract or concrete)
    * @returns An instance of the requested service
    *
    * @example
    * ```typescript
+   * // Get by concrete class
    * const accountService = this.getService(AccountService);
    * const account = await accountService.getAccount(accountId);
+   *
+   * // Get by abstract class (returns the registered concrete implementation)
+   * const discordService = this.getService(DiscordService); // Returns RPDiscordService instance
    * ```
    */
   protected getService<Service>(
-    ServiceConstructor: new (context: IServiceContext<T>) => Service,
+    ServiceConstructor:
+      | (new (context: IServiceContext<T>) => Service)
+      | (abstract new (context: IServiceContext<T>) => Service),
   ): Service {
     return this.context.getService(ServiceConstructor as ServiceConstructor<Service, unknown>);
   }

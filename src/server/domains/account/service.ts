@@ -2,22 +2,28 @@ import {
   AccountApi,
   AccountAuthRequest,
   DiscordApi,
+  DiscordOAuthRedirectType,
   ExternalLoginAuthRequest,
   GrantAccessResult,
-  ImplicitDiscordAuthRequest,
+  RedirectUri,
   RegisterAccountRequest,
 } from '@bitzonegaming/roleplay-engine-sdk';
 import { DiscordOAuthTokenRequest } from '@bitzonegaming/roleplay-engine-sdk/discord/models/discord-oauth-token-request';
 import { ExternalLoginPreAuthRequest } from '@bitzonegaming/roleplay-engine-sdk/account/models/external-login-pre-auth-request';
 import { ExternalLoginPreAuthResult } from '@bitzonegaming/roleplay-engine-sdk/account/models/external-login-pre-auth-result';
+import { DiscordUserAccountInfo } from '@bitzonegaming/roleplay-engine-sdk/discord/models/discord-user-account-info';
 
 import { OnServer } from '../../core/events/decorators';
 import { RPSessionFinished } from '../session/events/session-finished';
 import { RPSessionAuthorized } from '../session/events/session-authorized';
 import { SocketAccountUsernameChanged } from '../../socket/events/socket-account-username-changed';
 import { RPServerService } from '../../core/server-service';
+import { DiscordService } from '../../natives/services/discord.service';
+import { NotFoundError } from '../../core/errors';
+import { SessionId } from '../session/models/session';
 
 import { AccountId, RPAccount } from './models/account';
+import { RPImplicitDiscordAuthRequest } from './models/request/implicit-discord-auth.request';
 
 /**
  * Service for managing player accounts in the roleplay server.
@@ -169,8 +175,18 @@ export class AccountService extends RPServerService {
    * @returns Promise resolving to authentication result
    * @throws {EngineError} When Discord authentication fails
    */
-  public async authDiscordImplicitFlow(request: ImplicitDiscordAuthRequest) {
-    return this.getEngineApi(DiscordApi).authImplicitFlow(request);
+  public async authDiscordImplicitFlow(
+    request: RPImplicitDiscordAuthRequest,
+  ): Promise<GrantAccessResult> {
+    const discordUserId = this.getService(DiscordService).getDiscordUserId(request.sessionId);
+    if (!discordUserId) {
+      throw new NotFoundError('DISCORD_USER_NOT_FOUND', {});
+    }
+
+    return this.getEngineApi(DiscordApi).authImplicitFlow({
+      discordUserId,
+      ...request,
+    });
   }
 
   /**
@@ -183,22 +199,40 @@ export class AccountService extends RPServerService {
    * @returns Promise resolving to authentication result
    * @throws {EngineError} When Discord OAuth authentication fails
    */
-  public async authDiscordOAuthFlow(request: DiscordOAuthTokenRequest) {
+  public async authDiscordOAuthFlow(request: DiscordOAuthTokenRequest): Promise<GrantAccessResult> {
     return this.getEngineApi(DiscordApi).authOAuthFlow(request);
   }
 
   /**
-   * Retrieves Discord user information by Discord user ID.
+   * Retrieves Discord user information by session Id.
    *
    * This method fetches Discord user details which can be used for
    * checking if the user is whitelisted for the server.
    *
-   * @param discordUserId - The Discord user's unique identifier
+   * @param sessionId - The session ID of the user
    * @returns Promise resolving to Discord user account information
    * @throws {EngineError} When Discord user is not found or access is denied
    */
-  public async getDiscordUser(discordUserId: string) {
+  public async getDiscordUser(sessionId: SessionId): Promise<DiscordUserAccountInfo> {
+    const discordUserId = this.getService(DiscordService).getDiscordUserId(sessionId);
+    if (!discordUserId) {
+      throw new NotFoundError('DISCORD_USER_NOT_FOUND', {});
+    }
+
     return this.getEngineApi(DiscordApi).getDiscordUserById(discordUserId);
+  }
+
+  /**
+   * Gets the Discord OAuth authorization URL for game integration.
+   *
+   * This method generates the OAuth authorization URL that players can use
+   * to authorize the game to access their Discord account information.
+   *
+   * @returns Promise resolving to the Discord OAuth authorization URL
+   * @throws {EngineError} When OAuth URL generation fails
+   */
+  public async getDiscordOAuthAuthorizeUrl(): Promise<RedirectUri> {
+    return this.getEngineApi(DiscordApi).getDiscordOAuthAuthorizeUrl(DiscordOAuthRedirectType.Game);
   }
 
   @OnServer('sessionAuthorized')

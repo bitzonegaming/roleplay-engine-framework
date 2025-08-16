@@ -9,6 +9,7 @@ import { MockLogger } from '../../../../test/mocks';
 import { RPServerContext } from '../../core/context';
 import { RPServerEvents } from '../../core/events/events';
 import { RPServerHooks } from '../../core/hooks/hooks';
+import { DiscordService } from '../../natives/services/discord.service';
 
 import { AccountService } from './service';
 import { AccountId, RPAccount } from './models/account';
@@ -19,6 +20,7 @@ describe('AccountService', () => {
   let mockHookBus: RPHookBus<RPServerHooks>;
   let mockContext: RPServerContext;
   let accountService: AccountService;
+  let mockDiscordService: jest.Mocked<DiscordService>;
 
   // Test data
   const testAccountId: AccountId = 'acc_test123';
@@ -37,6 +39,10 @@ describe('AccountService', () => {
     mockEventEmitter = new RPEventEmitter<RPServerEvents>();
     mockHookBus = new RPHookBus<RPServerHooks>();
 
+    mockDiscordService = {
+      getDiscordUserId: jest.fn().mockReturnValue('discord_user_123'),
+    } as unknown as jest.Mocked<DiscordService>;
+
     mockContext = {
       logger: mockLogger,
       eventEmitter: mockEventEmitter,
@@ -48,7 +54,7 @@ describe('AccountService', () => {
         preAuthExternalLogin: jest.fn().mockResolvedValue({ token: 'pre_auth' }),
         authExternalLogin: jest.fn().mockResolvedValue({ access_token: 'token' }),
       }),
-      getService: jest.fn(),
+      getService: jest.fn().mockReturnValue(mockDiscordService),
     } as unknown as RPServerContext;
 
     accountService = new AccountService(mockContext);
@@ -112,7 +118,7 @@ describe('AccountService', () => {
     });
 
     it('should handle Discord implicit flow', async () => {
-      const request = { discordUserId: 'discord123' };
+      const request = { sessionId: 'test-session' };
 
       const result = await accountService.authDiscordImplicitFlow(request);
 
