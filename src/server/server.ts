@@ -10,8 +10,6 @@ import { EngineSocket } from './socket/socket';
 import { SessionService } from './domains/session/service';
 import { RPServerContext, RPServerContextCtor, RPServerContextOptions } from './core/context';
 import { CustomServerContextOptions } from './core/types';
-import { RPS2CEventHandler } from './s2c/server-to-client-event-handler';
-import { NativeS2CEventsAdapter } from './natives/server-to-client-events-adapter';
 import { AccountService } from './domains/account/service';
 import { ConfigurationService } from './domains/configuration/service';
 import { LocalizationService } from './domains/localization/service';
@@ -47,8 +45,6 @@ export interface RPServerNatives<
   TEvents extends RPServerEvents = RPServerEvents,
   THooks extends RPServerHooks = RPServerHooks,
 > {
-  /** Adapter for server-to-client event handling with the game engine */
-  s2cEventsAdapter: NativeS2CEventsAdapter;
   /** Optional custom server context configuration */
   customContext?: {
     /** Custom context constructor type */
@@ -107,8 +103,6 @@ export class RPServer {
   private readonly context: RPServerContext;
   /** WebSocket connection to the roleplay engine */
   private readonly socket: EngineSocket;
-  /** Handler for server-to-client events */
-  private readonly s2cEventHandler: RPS2CEventHandler;
   /** API server instance */
   private readonly apiServer?: ApiServer;
   /** Registered API controllers */
@@ -139,7 +133,6 @@ export class RPServer {
     const eventEmitter = new RPEventEmitter<RPServerEvents>();
     const hookBus = new RPHookBus<RPServerHooks>();
 
-    this.s2cEventHandler = new RPS2CEventHandler(eventEmitter, natives.s2cEventsAdapter);
     this.socket = new EngineSocket(
       {
         url: options.socketUrl,

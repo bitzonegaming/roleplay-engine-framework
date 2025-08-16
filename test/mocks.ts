@@ -2,7 +2,6 @@
  * Common mocks for testing
  */
 import { RPLogger } from '../src/core/logger';
-import { NativeS2CEventsAdapter } from '../src/server';
 
 import Mocked = jest.Mocked;
 
@@ -36,29 +35,6 @@ export class MockLogger implements RPLogger {
     return this.logs
       .filter((log) => log.level === level)
       .map(({ message, args }) => ({ message, args }));
-  }
-}
-
-/**
- * Mock S2C events adapter for testing
- */
-export class MockS2CEventsAdapter implements NativeS2CEventsAdapter {
-  public emittedEvents: Array<{ method: string; args: unknown[] }> = [];
-
-  emitSessionEvent(...args: unknown[]): void {
-    this.emittedEvents.push({ method: 'emitSessionEvent', args });
-  }
-
-  emitAccountEvent(...args: unknown[]): void {
-    this.emittedEvents.push({ method: 'emitAccountEvent', args });
-  }
-
-  emitAll(...args: unknown[]): void {
-    this.emittedEvents.push({ method: 'emitAll', args });
-  }
-
-  clear(): void {
-    this.emittedEvents = [];
   }
 }
 
