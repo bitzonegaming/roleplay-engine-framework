@@ -9,8 +9,6 @@ import { MockLogger } from '../../test/mocks';
 import { RPServerContext } from './core/context';
 import { RPServer, RPServerNatives, RPServerOptions } from './server';
 import { EngineSocket } from './socket/socket';
-import { RPS2CEventHandler } from './s2c/server-to-client-event-handler';
-import { NativeS2CEventsAdapter } from './natives/server-to-client-events-adapter';
 import { AccountService } from './domains/account/service';
 import { SessionService } from './domains/session/service';
 import { WorldService } from './domains/world/service';
@@ -22,15 +20,12 @@ import { ApiServer } from './api';
 // Mock external dependencies
 jest.mock('@bitzonegaming/roleplay-engine-sdk');
 jest.mock('./socket/socket');
-jest.mock('./s2c/server-to-client-event-handler');
 jest.mock('./core/context');
 jest.mock('./api/api-server');
 
 describe('RPServer', () => {
   let mockLogger: MockLogger;
-  let mockS2CEventsAdapter: NativeS2CEventsAdapter;
   let mockEngineSocket: jest.Mocked<EngineSocket>;
-  let mockS2CEventHandler: jest.Mocked<RPS2CEventHandler>;
   let mockContext: jest.Mocked<RPServerContext>;
   let mockEngineClient: jest.Mocked<EngineClient>;
   let mockApiServer: jest.Mocked<ApiServer>;
@@ -49,19 +44,12 @@ describe('RPServer', () => {
     },
   };
 
-  const testNatives: RPServerNatives = {
-    s2cEventsAdapter: {} as NativeS2CEventsAdapter,
-  };
+  const testNatives: RPServerNatives = {};
 
   beforeEach(() => {
     (RPServer as unknown as { instance: RPServer | undefined }).instance = undefined;
 
     mockLogger = new MockLogger();
-    mockS2CEventsAdapter = {
-      handleSessionStarted: jest.fn(),
-      handleSessionFinished: jest.fn(),
-      handleAccountChanged: jest.fn(),
-    } as unknown as NativeS2CEventsAdapter;
 
     // Setup mocks
     mockEngineClient = {
@@ -72,10 +60,6 @@ describe('RPServer', () => {
       start: jest.fn().mockResolvedValue(undefined),
       close: jest.fn(),
     } as unknown as jest.Mocked<EngineSocket>;
-
-    mockS2CEventHandler = {
-      handleEvent: jest.fn(),
-    } as unknown as jest.Mocked<RPS2CEventHandler>;
 
     mockApiServer = {
       start: jest.fn().mockResolvedValue(undefined),
@@ -96,11 +80,8 @@ describe('RPServer', () => {
     // Mock constructors
     (EngineClient as jest.Mock).mockImplementation(() => mockEngineClient);
     (EngineSocket as jest.Mock).mockImplementation(() => mockEngineSocket);
-    (RPS2CEventHandler as jest.Mock).mockImplementation(() => mockS2CEventHandler);
     (ApiServer as jest.Mock).mockImplementation(() => mockApiServer);
     (RPServerContext.create as jest.Mock).mockReturnValue(mockContext);
-
-    testNatives.s2cEventsAdapter = mockS2CEventsAdapter;
   });
 
   afterEach(() => {

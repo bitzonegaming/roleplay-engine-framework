@@ -61,22 +61,9 @@ const serverOptions: RPServerOptions = {
     }
 };
 
-// Server natives (required integrations)
+// Server natives (optional integrations)
 const natives: RPServerNatives = {
-    s2cEventsAdapter: {
-        emitSessionEvent: (event, payload) => {
-            // Find player by sessionId and send the event
-            console.log('Session event:', event, payload);
-        },
-        emitAccountEvent: (event, payload) => {
-            // Find player by accountId and send the event
-            console.log('Account event:', event, payload);
-        },
-        emitAll: (event, payload) => {
-            // Emit events to all connected clients
-            console.log('Broadcast event:', event, payload);
-        }
-    }
+    // Add custom natives if needed
 };
 
 // Create and start server
@@ -340,17 +327,6 @@ const customOptions: RoleplayServerOptions = {
 };
 
 const customNatives: RPServerNatives<RoleplayServerOptions, RoleplayServerEvents, RoleplayServerHooks> = {
-    s2cEventsAdapter: {
-        handleSessionStarted: (sessionId, accountId) => {
-            console.log(`Session started: ${sessionId} for account: ${accountId}`);
-        },
-        handleSessionFinished: (sessionId, reason) => {
-            console.log(`Session finished: ${sessionId}, reason: ${reason}`);
-        },
-        handleAccountChanged: (sessionId, accountId) => {
-            console.log(`Account changed for session: ${sessionId} to: ${accountId}`);
-        }
-    },
     customContext: {
         type: RoleplayServerContext,
         options: customOptions
