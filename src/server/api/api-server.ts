@@ -40,10 +40,10 @@ export class ApiServer<C = RPServerContext> {
     this.fastify.setErrorHandler(createErrorHandler(context as RPServerContext));
 
     this.fastify.register(cors, {
-      origin: config.cors?.origin ?? true,
+      origin: config.cors?.origin ?? '*',
       methods: config.cors?.methods ?? ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
       credentials: config.cors?.credentials ?? true,
-      allowedHeaders: config.cors?.allowedHeaders,
+      allowedHeaders: config.cors?.allowedHeaders ?? '*',
     });
   }
 
