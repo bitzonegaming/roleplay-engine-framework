@@ -513,4 +513,198 @@ describe('EngineSocket Integration Tests', () => {
       socket.close();
     });
   });
+
+  describe('Ping/Pong Functionality', () => {
+    it('should respond to server ping with pong', async () => {
+      const config = { ...baseConfig, url: `ws://localhost:${actualPort}` };
+      const socket = new EngineSocket(config, mockEventEmitter, mockLogger);
+      activeSocket = socket;
+
+      let pongReceived = false;
+      mockServer.once('connection', (ws) => {
+        ws.on('pong', () => {
+          pongReceived = true;
+        });
+
+        const handshakeMessage: SocketMessage<{ timestamp: number }> = {
+          event: 'connected',
+          data: { timestamp: Date.now() },
+          headers: {},
+        };
+        ws.send(JSON.stringify(handshakeMessage));
+
+        // Send ping after handshake
+        setTimeout(() => {
+          ws.ping();
+        }, 100);
+      });
+
+      await socket.start();
+
+      // Wait for ping/pong exchange
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      expect(pongReceived).toBe(true);
+
+      socket.close();
+      activeSocket = null;
+    });
+
+    it('should send ping to server periodically', async () => {
+      jest.useFakeTimers();
+
+      const config = { ...baseConfig, url: `ws://localhost:${actualPort}` };
+      const socket = new EngineSocket(config, mockEventEmitter, mockLogger);
+      activeSocket = socket;
+
+      let pingReceived = false;
+      mockServer.once('connection', (ws) => {
+        ws.on('ping', () => {
+          pingReceived = true;
+        });
+
+        const handshakeMessage: SocketMessage<{ timestamp: number }> = {
+          event: 'connected',
+          data: { timestamp: Date.now() },
+          headers: {},
+        };
+        ws.send(JSON.stringify(handshakeMessage));
+      });
+
+      await socket.start();
+
+      // Fast-forward time to trigger ping interval (25 seconds)
+      jest.advanceTimersByTime(25000);
+
+      // Wait a bit for ping to be sent
+      jest.useRealTimers();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(pingReceived).toBe(true);
+
+      socket.close();
+      activeSocket = null;
+    });
+
+    it('should clear ping interval when connection is closed', async () => {
+      jest.useFakeTimers();
+
+      const config = { ...baseConfig, url: `ws://localhost:${actualPort}` };
+      const socket = new EngineSocket(config, mockEventEmitter, mockLogger);
+      activeSocket = socket;
+
+      let pingCount = 0;
+      mockServer.once('connection', (ws) => {
+        ws.on('ping', () => {
+          pingCount++;
+        });
+
+        const handshakeMessage: SocketMessage<{ timestamp: number }> = {
+          event: 'connected',
+          data: { timestamp: Date.now() },
+          headers: {},
+        };
+        ws.send(JSON.stringify(handshakeMessage));
+      });
+
+      await socket.start();
+
+      // Trigger one ping
+      jest.advanceTimersByTime(25000);
+
+      // Close connection
+      socket.close();
+
+      // Advance time more - no more pings should be sent
+      jest.advanceTimersByTime(50000);
+
+      jest.useRealTimers();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(pingCount).toBe(1); // Only one ping before close
+
+      activeSocket = null;
+    });
+
+    it('should handle pong responses from server', async () => {
+      const config = { ...baseConfig, url: `ws://localhost:${actualPort}` };
+      const socket = new EngineSocket(config, mockEventEmitter, mockLogger);
+      activeSocket = socket;
+
+      const logSpy = jest.spyOn(mockLogger, 'debug');
+      mockServer.once('connection', (ws) => {
+        const handshakeMessage: SocketMessage<{ timestamp: number }> = {
+          event: 'connected',
+          data: { timestamp: Date.now() },
+          headers: {},
+        };
+        ws.send(JSON.stringify(handshakeMessage));
+
+        // Send pong after handshake
+        setTimeout(() => {
+          ws.pong();
+        }, 100);
+      });
+
+      await socket.start();
+
+      // Wait for pong to be received
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      expect(logSpy).toHaveBeenCalledWith('Received pong from server');
+
+      socket.close();
+      activeSocket = null;
+    });
+
+    it('should only ping when connection is open', async () => {
+      jest.useFakeTimers();
+
+      const config = { ...baseConfig, url: `ws://localhost:${actualPort}` };
+      const socket = new EngineSocket(config, mockEventEmitter, mockLogger);
+      activeSocket = socket;
+
+      let pingCount = 0;
+      mockServer.once('connection', (ws) => {
+        ws.on('ping', () => {
+          pingCount++;
+        });
+
+        const handshakeMessage: SocketMessage<{ timestamp: number }> = {
+          event: 'connected',
+          data: { timestamp: Date.now() },
+          headers: {},
+        };
+        ws.send(JSON.stringify(handshakeMessage));
+      });
+
+      await socket.start();
+
+      // First advance timer to trigger first ping while connection is open
+      jest.advanceTimersByTime(25000);
+
+      // Now close the connection manually
+      socket.close();
+
+      // Wait for close to complete and timers to clear
+      jest.useRealTimers();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      jest.useFakeTimers();
+
+      // Reset ping count after close
+      const initialPingCount = pingCount;
+      pingCount = 0;
+
+      // Advance time more - no more pings should be sent
+      jest.advanceTimersByTime(50000);
+
+      jest.useRealTimers();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(pingCount).toBe(0);
+      expect(initialPingCount).toBeGreaterThan(0);
+
+      activeSocket = null;
+    });
+  });
 });

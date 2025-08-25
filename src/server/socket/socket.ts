@@ -26,7 +26,7 @@ export interface EngineSocketConfig {
 }
 
 export class EngineSocket {
-  private ws!: WebSocket;
+  private ws!: ws.WebSocket;
   private connectedAt = 0;
 
   private readonly maxRetries = 20;
@@ -38,6 +38,7 @@ export class EngineSocket {
   private isConnected = false;
 
   private activeTimers = new Set<NodeJS.Timeout>();
+  private pingInterval?: NodeJS.Timeout;
 
   constructor(
     private readonly config: EngineSocketConfig,
@@ -69,6 +70,12 @@ export class EngineSocket {
 
     // Clear all active timers
     this.clearAllTimers();
+
+    // Clear ping interval
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = undefined;
+    }
 
     if (this.ws) {
       this.ws.close(code, reason);
@@ -112,9 +119,7 @@ export class EngineSocket {
 
   private async connectOnce(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const WebSocketImpl =
-        (global as typeof globalThis & { WebSocket?: typeof WebSocket }).WebSocket ?? ws;
-      this.ws = new WebSocketImpl(
+      this.ws = new ws.WebSocket(
         this.appendQuery(this.config.url, {
           apiKeyId: this.config.apiKeyId,
           apiKeySecret: this.config.apiKeySecret,
@@ -123,6 +128,17 @@ export class EngineSocket {
         this.config.protocols,
       );
       this.ws.binaryType = 'arraybuffer';
+
+      if ('on' in this.ws && typeof this.ws.on === 'function') {
+        this.ws.on('ping', () => {
+          this.logger.debug('Received ping from server');
+          this.ws.pong();
+        });
+
+        this.ws.on('pong', () => {
+          this.logger.debug('Received pong from server');
+        });
+      }
 
       this.ws.onerror = (err) => {
         this.logger.error('WebSocket error:', err);
@@ -143,7 +159,7 @@ export class EngineSocket {
           }, 60_000),
         );
 
-        const ackHandler = (ev: MessageEvent) => {
+        const ackHandler = (ev: ws.MessageEvent) => {
           let msg: SocketMessage;
           try {
             msg = JSON.parse(ev.data as string);
@@ -164,6 +180,7 @@ export class EngineSocket {
             );
             this.ws.onmessage = this.handleMessage.bind(this);
 
+            this.setupPingInterval();
             this.setupPostHandshakeReconnection();
 
             resolve();
@@ -174,7 +191,7 @@ export class EngineSocket {
     });
   }
 
-  private handleMessage(ev: MessageEvent) {
+  private handleMessage(ev: ws.MessageEvent) {
     let msg: SocketMessage;
     try {
       msg = JSON.parse(ev.data as string);
@@ -232,12 +249,33 @@ export class EngineSocket {
     return parts.length ? `${url}?${parts.join('&')}` : url;
   }
 
+  private setupPingInterval(): void {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+    }
+
+    this.pingInterval = setInterval(() => {
+      if (this.ws && this.ws.readyState === 1) {
+        if ('ping' in this.ws && typeof this.ws.ping === 'function') {
+          this.ws.ping();
+          this.logger.debug('Sent ping to server');
+        }
+      }
+    }, 25000);
+  }
+
   private setupPostHandshakeReconnection(): void {
     if (!this.ws) return;
 
     // Override close handler to handle post-handshake disconnections
     this.ws.onclose = (e) => {
       this.isConnected = false;
+
+      // Clear ping interval on disconnect
+      if (this.pingInterval) {
+        clearInterval(this.pingInterval);
+        this.pingInterval = undefined;
+      }
 
       if (this.manuallyClosed) {
         this.logger.info('Socket manually closed');
