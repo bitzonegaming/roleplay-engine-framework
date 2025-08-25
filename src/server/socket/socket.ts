@@ -131,12 +131,12 @@ export class EngineSocket {
 
       if ('on' in this.ws && typeof this.ws.on === 'function') {
         this.ws.on('ping', () => {
-          this.logger.debug('Received ping from server');
+          this.logger.trace('Received ping from server');
           this.ws.pong();
         });
 
         this.ws.on('pong', () => {
-          this.logger.debug('Received pong from server');
+          this.logger.trace('Received pong from server');
         });
       }
 

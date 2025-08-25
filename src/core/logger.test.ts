@@ -1,11 +1,12 @@
 /**
  * Tests for RPLogger interface and default implementation
  */
-import { defaultLogger, RPLogger } from './logger';
+import { defaultLogger, LogLevel, RPLogger } from './logger';
 
 describe('RPLogger Interface', () => {
   describe('defaultLogger', () => {
     let consoleSpies: {
+      trace: jest.SpyInstance;
       debug: jest.SpyInstance;
       info: jest.SpyInstance;
       warn: jest.SpyInstance;
@@ -14,11 +15,14 @@ describe('RPLogger Interface', () => {
 
     beforeEach(() => {
       consoleSpies = {
+        trace: jest.spyOn(console, 'trace').mockImplementation(),
         debug: jest.spyOn(console, 'debug').mockImplementation(),
         info: jest.spyOn(console, 'info').mockImplementation(),
         warn: jest.spyOn(console, 'warn').mockImplementation(),
         error: jest.spyOn(console, 'error').mockImplementation(),
       };
+
+      defaultLogger.minLevel = LogLevel.TRACE;
     });
 
     afterEach(() => {
@@ -146,6 +150,7 @@ describe('RPLogger Interface', () => {
     it('should be compatible with Winston logger pattern', () => {
       // Simulate Winston-style usage
       const winstonLikeLogger: RPLogger = {
+        trace: jest.fn(),
         debug: jest.fn(),
         info: jest.fn(),
         warn: jest.fn(),
@@ -166,6 +171,7 @@ describe('RPLogger Interface', () => {
     it('should be compatible with Pino logger pattern', () => {
       // Simulate Pino-style usage
       const pinoLikeLogger: RPLogger = {
+        trace: jest.fn(),
         debug: jest.fn(),
         info: jest.fn(),
         warn: jest.fn(),
@@ -189,6 +195,7 @@ describe('RPLogger Interface', () => {
     it('should be compatible with console logger pattern', () => {
       // Simulate console-style usage
       const consoleLikeLogger: RPLogger & { log?: typeof consoleLikeLogger.info } = {
+        trace: jest.fn(),
         debug: jest.fn(),
         info: jest.fn(),
         warn: jest.fn(),

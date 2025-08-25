@@ -631,7 +631,7 @@ describe('EngineSocket Integration Tests', () => {
       const socket = new EngineSocket(config, mockEventEmitter, mockLogger);
       activeSocket = socket;
 
-      const logSpy = jest.spyOn(mockLogger, 'debug');
+      const logSpy = jest.spyOn(mockLogger, 'trace');
       mockServer.once('connection', (ws) => {
         const handshakeMessage: SocketMessage<{ timestamp: number }> = {
           event: 'connected',

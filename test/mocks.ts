@@ -11,6 +11,10 @@ import Mocked = jest.Mocked;
 export class MockLogger implements RPLogger {
   public logs: Array<{ level: string; message: string; args: unknown[] }> = [];
 
+  trace(message: string, ...args: unknown[]): void {
+    this.logs.push({ level: 'trace', message, args });
+  }
+
   debug(message: string, ...args: unknown[]): void {
     this.logs.push({ level: 'debug', message, args });
   }

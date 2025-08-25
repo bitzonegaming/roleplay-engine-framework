@@ -38,4 +38,6 @@ export interface IServiceContext<T extends ServerTypes = ServerTypes> {
  * Service constructor type - accepts the concrete context, not just the interface
  * Supports both concrete and abstract service classes
  */
-export type ServiceConstructor<S, TContext = unknown> = (new (context: TContext) => S) | (abstract new (context: TContext) => S);
+export type ServiceConstructor<S, TContext = unknown> =
+  | (new (context: TContext) => S)
+  | (abstract new (context: TContext) => S);
