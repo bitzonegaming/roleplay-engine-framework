@@ -8,14 +8,14 @@ import {
 } from '@bitzonegaming/roleplay-engine-sdk';
 
 import { SocketSessionStarted } from '../../socket/events/socket-session-started';
-import { RPPlayerConnecting } from '../../natives/events/player-connecting';
+import { RPPlayerConnecting } from '../../natives/events/player/player-connecting';
 import { SocketSessionAuthorized } from '../../socket/events/socket-session-authorized';
 import { SocketSessionFinished } from '../../socket/events/socket-session-finished';
 import { RPServerService } from '../../core/server-service';
 import { OnServer } from '../../core/events/decorators';
 import { SocketSessionCharacterLinked } from '../../socket/events/socket-session-character-linked';
 import { SocketSessionUpdated } from '../../socket/events/socket-session-updated';
-import { RPPlayerDisconnected } from '../../natives/events/player-disconnected';
+import { RPPlayerDisconnected } from '../../natives/events/player/player-disconnected';
 import { ConflictError, ForbiddenError, NotFoundError } from '../../core/errors';
 import { ReferenceService } from '../reference/service';
 
