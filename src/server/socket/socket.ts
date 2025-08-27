@@ -126,6 +126,11 @@ export class EngineSocket {
           serverId: this.config.serverId,
         }),
         this.config.protocols,
+        {
+          perMessageDeflate: true,
+          skipUTF8Validation: false,
+          maxPayload: 10 * 1024 * 1024,
+        },
       );
       this.ws.binaryType = 'arraybuffer';
 
@@ -261,7 +266,7 @@ export class EngineSocket {
           this.logger.debug('Sent ping to server');
         }
       }
-    }, 25000);
+    }, 30000);
   }
 
   private setupPostHandshakeReconnection(): void {
