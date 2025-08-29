@@ -18,7 +18,7 @@ import { RPSessionFinished } from '../session/events/session-finished';
 import { RPSessionAuthorized } from '../session/events/session-authorized';
 import { SocketAccountUsernameChanged } from '../../socket/events/socket-account-username-changed';
 import { RPServerService } from '../../core/server-service';
-import { DiscordService } from '../../natives/services/discord.service';
+import { RPDiscordService } from '../../natives/services/discord.service';
 import { NotFoundError } from '../../core/errors';
 import { SessionId } from '../session/models/session';
 
@@ -178,7 +178,7 @@ export class AccountService extends RPServerService {
   public async authDiscordImplicitFlow(
     request: RPImplicitDiscordAuthRequest,
   ): Promise<GrantAccessResult> {
-    const discordUserId = this.getService(DiscordService).getDiscordUserId(request.sessionId);
+    const discordUserId = this.getService(RPDiscordService).getDiscordUserId(request.sessionId);
     if (!discordUserId) {
       throw new NotFoundError('DISCORD_USER_NOT_FOUND', {});
     }
@@ -214,7 +214,7 @@ export class AccountService extends RPServerService {
    * @throws {EngineError} When Discord user is not found or access is denied
    */
   public async getDiscordUser(sessionId: SessionId): Promise<DiscordUserAccountInfo> {
-    const discordUserId = this.getService(DiscordService).getDiscordUserId(sessionId);
+    const discordUserId = this.getService(RPDiscordService).getDiscordUserId(sessionId);
     if (!discordUserId) {
       throw new NotFoundError('DISCORD_USER_NOT_FOUND', {});
     }

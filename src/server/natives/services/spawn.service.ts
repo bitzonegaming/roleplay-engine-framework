@@ -2,7 +2,7 @@ import { RPServerService } from '../../core/server-service';
 import { SpawnPoint } from '../entitites/spawn-point';
 import { SpawnConfig, PlayerSpawnOptions, SpawnPointData } from '../types/spawn.types';
 
-export abstract class SpawnService extends RPServerService {
+export abstract class RPSpawnService extends RPServerService {
   abstract addSpawnPoint(spawnData: SpawnPointData): Promise<string>;
   abstract removeSpawnPoint(spawnId: string): Promise<boolean>;
   abstract getSpawnPoint(spawnId: string): SpawnPoint | undefined;
