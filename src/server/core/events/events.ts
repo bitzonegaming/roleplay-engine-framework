@@ -1,4 +1,4 @@
-import { RPPlayerConnecting } from '../../natives/events/player-connecting';
+import { RPPlayerConnecting } from '../../natives/events/player/player-connecting';
 import { RPSessionFinished } from '../../domains/session/events/session-finished';
 import { RPSessionStarted } from '../../domains/session/events/session-started';
 import { SocketSessionStarted } from '../../socket/events/socket-session-started';
@@ -20,7 +20,7 @@ import { SocketLocaleEnabled } from '../../socket/events/socket-locale-enabled';
 import { SocketLocaleDisabled } from '../../socket/events/socket-locale-disabled';
 import { RPLocalesUpdated } from '../../domains/localization/events/locales-updated';
 import { RPLocalizationUpdated } from '../../domains/localization/events/localization-updated';
-import { RPPlayerDisconnected } from '../../natives/events/player-disconnected';
+import { RPPlayerDisconnected } from '../../natives/events/player/player-disconnected';
 import { SocketCameraCreated } from '../../socket/events/socket-camera-created';
 import { SocketCameraUpdated } from '../../socket/events/socket-camera-updated';
 import { SocketCameraEnabled } from '../../socket/events/socket-camera-enabled';
