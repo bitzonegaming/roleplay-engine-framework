@@ -573,8 +573,8 @@ describe('EngineSocket Integration Tests', () => {
 
       await socket.start();
 
-      // Fast-forward time to trigger ping interval (25 seconds)
-      jest.advanceTimersByTime(25000);
+      // Fast-forward time to trigger ping interval (30 seconds)
+      jest.advanceTimersByTime(30000);
 
       // Wait a bit for ping to be sent
       jest.useRealTimers();
@@ -610,7 +610,7 @@ describe('EngineSocket Integration Tests', () => {
       await socket.start();
 
       // Trigger one ping
-      jest.advanceTimersByTime(25000);
+      jest.advanceTimersByTime(30000);
 
       // Close connection
       socket.close();
@@ -681,7 +681,7 @@ describe('EngineSocket Integration Tests', () => {
       await socket.start();
 
       // First advance timer to trigger first ping while connection is open
-      jest.advanceTimersByTime(25000);
+      jest.advanceTimersByTime(30000);
 
       // Now close the connection manually
       socket.close();

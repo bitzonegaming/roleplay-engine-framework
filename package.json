@@ -1,6 +1,6 @@
 {
   "name": "@bitzonegaming/roleplay-engine-framework",
-  "version": "0.1.8",
+  "version": "0.1.11",
   "description": "Roleplay Engine Framework",
   "main": "index.js",
   "types": "index.d.ts",
@@ -30,7 +30,7 @@
     "node": "^20.0.0"
   },
   "dependencies": {
-    "@bitzonegaming/roleplay-engine-sdk": "^0.1.16",
+    "@bitzonegaming/roleplay-engine-sdk": "^0.1.21",
     "@fastify/cors": "^11.1.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",

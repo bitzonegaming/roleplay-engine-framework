@@ -17,6 +17,10 @@ export function createErrorHandler<C extends RPServerContext>(context: C) {
     reply: FastifyReply,
   ): Promise<void> {
     if (error instanceof EngineError) {
+      context.logger.error(
+        `[EngineError] Http request failed for [${request.method}] ${request.url}`,
+        error,
+      );
       reply.status(error.statusCode).send({
         key: error.key,
         message: error.message,

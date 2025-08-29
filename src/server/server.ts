@@ -18,6 +18,7 @@ import { ReferenceService } from './domains/reference/service';
 import { ApiControllerCtor, ApiServer, ApiServerConfig } from './api';
 import { AccountController } from './domains/account/api.controller';
 import { HealthController } from './api/controllers/health.controller';
+import { SessionController } from './domains/session/api.controller';
 
 /** Configuration options for creating a roleplay server instance */
 export interface RPServerOptions {
@@ -163,7 +164,9 @@ export class RPServer {
       .addService(AccountService);
 
     this.apiServer = new ApiServer(this.context, options.api);
-    this.registerController(HealthController).registerController(AccountController);
+    this.registerController(HealthController)
+      .registerController(AccountController)
+      .registerController(SessionController);
   }
 
   /**
