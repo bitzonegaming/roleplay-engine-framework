@@ -1,6 +1,6 @@
 {
   "name": "@bitzonegaming/roleplay-engine-framework",
-  "version": "0.1.11",
+  "version": "0.1.14",
   "description": "Roleplay Engine Framework",
   "main": "index.js",
   "types": "index.d.ts",
