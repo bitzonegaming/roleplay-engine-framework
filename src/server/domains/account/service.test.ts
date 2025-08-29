@@ -9,7 +9,7 @@ import { MockLogger } from '../../../../test/mocks';
 import { RPServerContext } from '../../core/context';
 import { RPServerEvents } from '../../core/events/events';
 import { RPServerHooks } from '../../core/hooks/hooks';
-import { DiscordService } from '../../natives/services/discord.service';
+import { RPDiscordService } from '../../natives/services/discord.service';
 
 import { AccountService } from './service';
 import { AccountId, RPAccount } from './models/account';
@@ -20,7 +20,7 @@ describe('AccountService', () => {
   let mockHookBus: RPHookBus<RPServerHooks>;
   let mockContext: RPServerContext;
   let accountService: AccountService;
-  let mockDiscordService: jest.Mocked<DiscordService>;
+  let mockDiscordService: jest.Mocked<RPDiscordService>;
 
   // Test data
   const testAccountId: AccountId = 'acc_test123';
@@ -41,7 +41,7 @@ describe('AccountService', () => {
 
     mockDiscordService = {
       getDiscordUserId: jest.fn().mockReturnValue('discord_user_123'),
-    } as unknown as jest.Mocked<DiscordService>;
+    } as unknown as jest.Mocked<RPDiscordService>;
 
     mockContext = {
       logger: mockLogger,
