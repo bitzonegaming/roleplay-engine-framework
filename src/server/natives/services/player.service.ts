@@ -1,5 +1,5 @@
 import { RPServerService } from '../../core/server-service';
-import { RPPlayer } from '../entitites/player';
+import { ServerPlayer } from '../entitites/player';
 import { RPSpawnService } from './spawn.service';
 import {
   RPPlayerConnecting,
@@ -21,7 +21,9 @@ import {
 } from '../events/c2s';
 import { ServerTypes } from '../../core/types';
 
-export abstract class RPPlayerService<T extends ServerTypes = ServerTypes> extends RPServerService<T> {
+export abstract class RPPlayerService<
+  T extends ServerTypes = ServerTypes,
+> extends RPServerService<T> {
   // OnClient methods (client events)
   abstract handleClientReady(payload: ClientPlayerReadyPayload): Promise<void>;
   abstract handleClientDied(payload: ClientPlayerDiedPayload): void;
@@ -43,6 +45,6 @@ export abstract class RPPlayerService<T extends ServerTypes = ServerTypes> exten
   abstract onForceRespawn(payload: RPForceRespawn): Promise<void>;
 
   // Utility methods
-  abstract getPlayer(id: string): RPPlayer;
+  abstract getPlayer(id: string): ServerPlayer;
   abstract getSpawnManager(): RPSpawnService;
 }

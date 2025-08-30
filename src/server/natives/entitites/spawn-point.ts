@@ -1,5 +1,5 @@
-import { Vector3 } from '../../../core/math';
-import { SpawnPointData } from '../types/spawn.types';
+import { Vector3 } from '../../../shared';
+import { SpawnPointData } from '../types';
 
 export class SpawnPoint {
   public readonly id: string;

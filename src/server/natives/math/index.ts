@@ -1,1 +1,1 @@
-export * from '../../../core/math';
+export * from '../../../shared/math';

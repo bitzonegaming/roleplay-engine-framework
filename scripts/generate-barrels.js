@@ -82,3 +82,8 @@ generateBarrel(serverDir, serverIndex, coreExports);
 const clientDir = path.join(__dirname, '../src/client');
 const clientIndex = path.join(clientDir, 'index.ts');
 generateBarrel(clientDir, clientIndex);
+
+// Generate shared barrel
+const sharedDir = path.join(__dirname, '../src/shared');
+const sharedIndex = path.join(sharedDir, 'index.ts');
+generateBarrel(sharedDir, sharedIndex);

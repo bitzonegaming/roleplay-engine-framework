@@ -1,4 +1,4 @@
-import { Vector3 } from '../../../../../core/math';
+import { Vector3 } from '../../../../../shared';
 
 export interface ClientPlayerDiedPayload {
   playerId: string;

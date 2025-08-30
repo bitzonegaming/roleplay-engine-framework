@@ -1,6 +1,6 @@
 {
   "name": "@bitzonegaming/roleplay-engine-framework",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "Roleplay Engine Framework",
   "main": "index.js",
   "types": "index.d.ts",
@@ -56,6 +56,11 @@
       "types": "./client/index.d.ts",
       "import": "./client/index.js",
       "require": "./client/index.js"
+    },
+    "./shared": {
+      "types": "./shared/index.d.ts",
+      "import": "./shared/index.js",
+      "require": "./shared/index.js"
     }
   },
   "publishConfig": {

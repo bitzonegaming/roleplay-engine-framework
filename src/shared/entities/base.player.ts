@@ -1,4 +1,4 @@
-import { Vector3 } from '../../../core/math';
+import { Vector3 } from '../math';
 
 export abstract class BasePlayer {
   constructor(public readonly id: string) {}

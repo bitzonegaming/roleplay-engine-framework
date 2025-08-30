@@ -1,3 +1,3 @@
-export * from './base.player';
+export * from '../../../shared/entities/base.player';
 export * from './player';
 export * from './spawn-point';
