@@ -1,4 +1,4 @@
-import { Vector3 } from '../math/vector3';
+import { Vector3 } from '../../../core/math';
 
 export interface SpawnPointData {
   x: number;

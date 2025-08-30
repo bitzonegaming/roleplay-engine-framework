@@ -1,4 +1,4 @@
-import { Vector3 } from '../math/vector3';
+import { Vector3 } from '../../../core/math';
 import { SpawnPointData } from '../types/spawn.types';
 
 export class SpawnPoint {
