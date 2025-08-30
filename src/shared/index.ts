@@ -5,8 +5,6 @@
 
 export * from './entities/base.player';
 export * from './events/c2s/player/player-died';
-export * from './events/c2s/player/player-ready';
-export * from './events/c2s/spawn/force-spawn';
 export * from './events/c2s/spawn/spawn-failed';
 export * from './events/c2s/spawn/spawn-request';
 export * from './math/base.vector';

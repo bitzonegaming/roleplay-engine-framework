@@ -13,10 +13,8 @@ import {
 import { RPNativeSessionStarted } from '../events/session';
 import { RPSpawnFailed, RPSpawnRequest, RPForceRespawn } from '../events/spawn';
 import {
-  ClientPlayerReadyPayload,
   ClientPlayerDiedPayload,
   ClientSpawnRequestPayload,
-  ClientForceSpawnPayload,
   ClientSpawnFailedPayload,
 } from '../../../shared/events/c2s';
 import { ServerTypes } from '../../core/types';
@@ -25,11 +23,11 @@ export abstract class RPPlayerService<
   T extends ServerTypes = ServerTypes,
 > extends RPServerService<T> {
   // OnClient methods (client events)
-  abstract handleClientReady(payload: ClientPlayerReadyPayload): Promise<void>;
-  abstract handleClientDied(payload: ClientPlayerDiedPayload): void;
-  abstract handleSpawnRequest(payload: ClientSpawnRequestPayload): void;
-  abstract handleForceSpawn(payload: ClientForceSpawnPayload): void;
-  abstract handleSpawnFailed(payload: ClientSpawnFailedPayload): void;
+  abstract handleClientReady(playerId: string): Promise<void>;
+  abstract handleClientDied(playerId: string, payload: ClientPlayerDiedPayload): void;
+  abstract handleSpawnRequest(playerId: string, payload: ClientSpawnRequestPayload): void;
+  abstract handleForceSpawn(playerId: string): void;
+  abstract handleSpawnFailed(playerId: string, payload: ClientSpawnFailedPayload): void;
 
   // OnServer methods (server events with payloads)
   abstract onPlayerConnecting(payload: RPPlayerConnecting): Promise<void>;
