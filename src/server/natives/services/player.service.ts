@@ -18,7 +18,7 @@ import {
   ClientSpawnRequestPayload,
   ClientForceSpawnPayload,
   ClientSpawnFailedPayload,
-} from '../events/c2s';
+} from '../../../shared/events/c2s';
 import { ServerTypes } from '../../core/types';
 
 export abstract class RPPlayerService<
