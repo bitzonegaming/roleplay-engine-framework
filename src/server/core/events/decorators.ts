@@ -19,7 +19,20 @@ export function OnServer<
 export function getEventHandlers<Events extends RPServerEvents = RPServerEvents>(
   instance: Record<string, unknown>,
 ) {
-  return Reflect.getOwnMetadata(HANDLERS, instance.constructor) as
-    | Array<{ method: string; event: keyof Events }>
-    | undefined;
+  const handlers: Array<{ method: string; event: keyof Events }> = [];
+  let currentProto = instance.constructor;
+
+  while (currentProto && currentProto !== Function.prototype) {
+    const protoHandlers = Reflect.getOwnMetadata(HANDLERS, currentProto) as
+      | Array<{ method: string; event: keyof Events }>
+      | undefined;
+
+    if (protoHandlers) {
+      handlers.push(...protoHandlers);
+    }
+
+    currentProto = Object.getPrototypeOf(currentProto);
+  }
+
+  return handlers.length > 0 ? handlers : undefined;
 }
