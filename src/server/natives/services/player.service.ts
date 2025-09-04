@@ -26,7 +26,6 @@ export abstract class RPPlayerService<
   abstract handleClientReady(playerId: string): Promise<void>;
   abstract handleClientDied(playerId: string, payload: ClientPlayerDiedPayload): void;
   abstract handleSpawnRequest(playerId: string, payload: ClientSpawnRequestPayload): void;
-  abstract handleForceSpawn(playerId: string): void;
   abstract handleSpawnFailed(playerId: string, payload: ClientSpawnFailedPayload): void;
 
   // OnServer methods (server events with payloads)
@@ -40,7 +39,6 @@ export abstract class RPPlayerService<
   abstract onPlayerSpawn(payload: RPPlayerSpawn): Promise<void>;
   abstract onSpawnFailed(payload: RPSpawnFailed): Promise<void>;
   abstract onPlayerSpawnRequested(payload: RPSpawnRequest): Promise<void>;
-  abstract onForceRespawn(payload: RPForceRespawn): Promise<void>;
 
   // Utility methods
   abstract getPlayer(id: string): ServerPlayer;
