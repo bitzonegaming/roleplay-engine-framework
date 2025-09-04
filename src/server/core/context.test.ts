@@ -8,7 +8,7 @@ import { RPHookBus } from '../../core/bus/hook-bus';
 import { MockEngineClient, MockLogger } from '../../../test/mocks';
 
 import { RPServerContext, RPServerContextOptions } from './context';
-import { CustomServerContextOptions } from './types';
+import { CustomServerContextOptions, ServerTypes } from './types';
 import { RPServerService } from './server-service';
 import { RPServerEvents } from './events/events';
 import { RPServerHooks } from './hooks/hooks';
@@ -877,15 +877,21 @@ describe('RPServerContext', () => {
   });
 
   describe('abstract service support', () => {
+    interface CustomServerTypes {
+      events: RPServerEvents;
+      hooks: RPServerHooks;
+      options: CustomServerContextOptions;
+    }
+
     // Abstract service for testing
-    abstract class AbstractService extends RPServerService {
+    abstract class AbstractService<T extends ServerTypes = ServerTypes> extends RPServerService<T> {
       abstract getValue(): string;
 
       abstract processData(data: string): Promise<string>;
     }
 
     // Concrete implementation
-    class ConcreteService extends AbstractService {
+    class ConcreteService extends AbstractService<CustomServerTypes> {
       getValue(): string {
         return 'concrete-value';
       }

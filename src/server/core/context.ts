@@ -232,12 +232,15 @@ export class RPServerContext<
     const service = new serviceConstructor(this);
 
     this.services.set(serviceConstructor, service as unknown as RPServerService);
-
-    const parentClass = Object.getPrototypeOf(serviceConstructor);
-    if (parentClass && parentClass !== Function.prototype && parentClass.name) {
-      if (!this.services.has(parentClass)) {
-        this.services.set(parentClass, service as unknown as RPServerService);
+    
+    let currentProto = Object.getPrototypeOf(serviceConstructor);
+    
+    while (currentProto && currentProto !== Function.prototype) {
+      if (currentProto.name && !this.services.has(currentProto)) {
+        this.services.set(currentProto, service as unknown as RPServerService);
       }
+      
+      currentProto = Object.getPrototypeOf(currentProto);
     }
 
     return this;
